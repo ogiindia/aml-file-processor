@@ -130,8 +130,36 @@ public class NRTFileWatcher {
 								} else if (fileName != null && (fileName.toString().endsWith(AMLConstants.XLS_FORMAT) 
 										|| fileName.toString().endsWith(AMLConstants.XLSX_FORMAT))) {
 									
+									LOGGER.info("File format {} Block Called.", fileProcessProConfig.getFromfileformat());
+									Path fullPath = path.resolve(fileName);
+									// Waiting for file write completion
+									waitForFileCompletion(fullPath);
+
+									String toCsvFileName = fileName.getFileName().toString();
+									Path csvFilePath = Paths.get(fileProcessProConfig.getDestinationpath(), toCsvFileName);
+									commonUtils.toMove(fullPath, csvFilePath);
+									LOGGER.info("###############File moved successfully#############");
+									
+									try {
+										if (StringUtils.isNotBlank(toCsvFileName)) {
+											if (csvFilePath != null && Files.exists(csvFilePath)) {
+												LOGGER.info("Final XLS/XLSX Path and Name after Convert : [{}]", csvFilePath.toString());
+												Long startDate = new Date().getTime();
+												LOGGER.info("NRTFileWatcher XLS/XLSX Import Start Time : [{}]", startDate);
+
+												// process
+												fileProcessService.xlsProcess(csvFilePath, fileProcessProConfig.getDestinationpath());
+
+												Long endTime = new Date().getTime();
+												LOGGER.info("NRTFileWatcher XLS/XLSX Import - Total time : [{}]", commonUtils.findIsHourMinSec((endTime - startDate)));
+											}
+										}
+									} catch (Exception e) {
+										LOGGER.error("Exception found in watchDirectory : {}", e);
+									}
+									LOGGER.info("File format {} block End.", AMLConstants.XLSX_FORMAT +"/" + AMLConstants.XLS_FORMAT);
 								}
-								
+							
 								completedFileCountSts = packageWatcherToChkFileCntReached();
 								LOGGER.info("completedFileCountSts - [{}]",completedFileCountSts);
 								if (completedFileCountSts) {
@@ -196,7 +224,7 @@ public class NRTFileWatcher {
 	 * boolean
 	 */
 	private boolean packageWatcherToChkFileCntReached() {
-		LOGGER.info("::::::::::::packageWatcherToChkFileCntReached methos called.:::::");
+		LOGGER.info("::::::::::::NRTFileWatcher@packageWatcherToChkFileCntReached methos called.:::::");
 		String currentDateNmFldr = null;
 		Path toPath = null;
 		boolean cbsFileImportStatus = false;
@@ -204,7 +232,7 @@ public class NRTFileWatcher {
 		try {
 			currentDateNmFldr = new SimpleDateFormat("yyyyMMdd").format(new Date());
 			toPath = Paths.get(fileProcessProConfig.getDestinationpath() + "/" + currentDateNmFldr + "/");
-			LOGGER.info("Get File Count - CSV Folder Path : [{}]",toPath);
+			LOGGER.info("Get File Count - CSV/XLS/XLSX Folder Path : [{}]",toPath);
 			// while(true) {
 			if (toPath != null) {
 				count = Files.list(toPath).filter(Files::isRegularFile).count();
@@ -218,11 +246,11 @@ public class NRTFileWatcher {
 				}
 			} // Thread.sleep(6000);}
 		} catch (Exception e) {
-			LOGGER.error("Exception found in FileWatcher@fileWatcherTogetCount : {}", e);
+			LOGGER.error("Exception found in NRTFileWatcher@fileWatcherTogetCount : {}", e);
 		} finally {
-
+			 currentDateNmFldr = null; toPath = null;
 		}
-		LOGGER.info("::::::::::::packageWatcherToChkFileCntReached method end.:::::\n");
+		LOGGER.info("::::::::::::NRTFileWatcher@packageWatcherToChkFileCntReached method end.:::::\n");
 		return cbsFileImportStatus;
 	}
 }

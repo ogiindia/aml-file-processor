@@ -20,7 +20,7 @@ public class FileProcessProConfig {
 	private String txntablenameprefix;
 	private Integer batchcount;
 	private String dbtype;
-
+	
 	public String getSourcepath() {
 		return sourcepath;
 	}
@@ -124,4 +124,5 @@ public class FileProcessProConfig {
 	public void setDbtype(String dbtype) {
 		this.dbtype = dbtype;
 	}
+
 }
