@@ -127,6 +127,9 @@ public class NRTFileWatcher {
 										LOGGER.error("Exception found in watchDirectory : {}", e);
 									}
 									LOGGER.info("File format {} block End.", AMLConstants.CSV_FORMAT);
+								} else if (fileName != null && (fileName.toString().endsWith(AMLConstants.XLS_FORMAT) 
+										|| fileName.toString().endsWith(AMLConstants.XLSX_FORMAT))) {
+									
 								}
 								
 								completedFileCountSts = packageWatcherToChkFileCntReached();

@@ -17,6 +17,12 @@ import org.apache.commons.csv.CSVFormat;
 import org.apache.commons.csv.CSVParser;
 import org.apache.commons.csv.CSVRecord;
 import org.apache.commons.lang3.StringUtils;
+import org.apache.poi.hssf.usermodel.HSSFWorkbook;
+import org.apache.poi.ss.usermodel.Cell;
+import org.apache.poi.ss.usermodel.Row;
+import org.apache.poi.ss.usermodel.Sheet;
+import org.apache.poi.ss.usermodel.Workbook;
+import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -45,6 +51,11 @@ public class FileProcessService {
 	@Autowired
 	CommonUtils commonUtils;
 
+	/**
+	 * 
+	 * @param csvPathParam
+	 * @param destinationPath
+	 */
 	public void csvfileProcessMethod(Path csvPathParam, String destinationPath) {
 		LOGGER.info("FileProcessService@csvfileProcessMethod Called.........");
 		Map<String, List<MapperSummarizationFiledImpl>> mapObj = null;
@@ -56,20 +67,18 @@ public class FileProcessService {
 		Reader reader = null;
 		CSVParser csvParser = null;
 		try {
-			
 			if (csvPathParam != null) {
 				mapOfFinaldata =  new HashMap<>();
 				finalDataLst = new ArrayList<>();
 				fileName = csvPathParam.getFileName().toString();
 				fileNamePrefix = StringUtils.substringBefore(fileName, "_");
-				
+
 				//csvFileName = csvFilePathObj.getFileName().toString();
 				LOGGER.info("CSV file Name is : [{}]",fileName);
-			
 				reader = new FileReader(csvPathParam.toAbsolutePath().toString());
 				csvParser = new CSVParser(reader, CSVFormat.DEFAULT.withFirstRecordAsHeader());
 				mapObj = fileMapper.toGetTranNRTMapfromRedis();
-				LOGGER.info("FileProcessService@csvfileProcessMethod - fileNamePrefix : [{}]", fileNamePrefix);
+				LOGGER.debug("FileProcessService@csvfileProcessMethod - fileNamePrefix : [{}]", fileNamePrefix);
 				if (mapObj != null && mapObj.size() > 0) {
 					LOGGER.warn("Mapping Table MAP is available - Size : {}", mapObj.size());
 					mappObjLst = mapObj.get(AMLConstants.NRTFILES + fileNamePrefix);
@@ -83,13 +92,8 @@ public class FileProcessService {
 							mapOfFinaldata =  new HashMap<>();
 							for (MapperSummarizationFiledImpl mappSummFilDto : mappObjLst) {
 								String csvColumnName = mappSummFilDto.getFieldName();
-								if (amlTableName == null) {
-									amlTableName = mappSummFilDto.getTableName();
-								}
-							
-								if(StringUtils.isBlank(uniqueId)) {
-									uniqueId = mappSummFilDto.getWhereClauseCloumn();
-								}
+								if(StringUtils.isBlank(amlTableName)) { amlTableName = mappSummFilDto.getTableName(); }
+								if(StringUtils.isBlank(uniqueId)) { uniqueId = mappSummFilDto.getWhereClauseCloumn();}
 								String amlColumnName = mappSummFilDto.getColumnName();
 								if(StringUtils.isNotBlank(amlColumnName)) {
 									mapOfFinaldata.put(amlColumnName.toLowerCase(), record.get(csvColumnName));
@@ -108,22 +112,12 @@ public class FileProcessService {
 							if (StringUtils.isNotBlank(amlTableName) && finalDataLst != null && finalDataLst.size() > 0) {
 								toFindTableInsertUpd(amlTableName, finalDataLst,uniqueId);
 							}
-						}
-						
-					} else {
-						LOGGER.warn("Mapping Table is available - Size : {}", mapObj.size());
-					}
-
-				} else {
-					LOGGER.warn("Mapping Table is empty / not found");
-				}
+						} 
+					} else { LOGGER.warn("Mapping Table is available - Size : {}", mapObj.size()); 	}
+				} else { LOGGER.warn("Mapping Table is empty / not found"); }
 			}
-			if(reader!=null) {
-				reader.close();reader=null;
-			}
-			if(csvParser!=null) {
-				csvParser.close();csvParser=null;
-			}
+			if(reader!=null) { reader.close();reader=null; }
+			if(csvParser!=null) { csvParser.close();csvParser=null; }
 			
 			String currentDateNmFldr = new SimpleDateFormat("yyyyMMdd").format(new Date());
 			if(fileProcessProConfig.isIsmove()) {
@@ -143,31 +137,12 @@ public class FileProcessService {
 				LOGGER.info("Deleting file : {}", csvPathParam.toString());
 				commonUtils.toDelete(csvPathParam.toString());
 			}
-		
-			/*
-			 * String fileNamPrfix = null; if(StringUtils.isNotBlank(fileName)) {
-			 * if(fileName.contains("_")) { String spltFN[] = fileName.split("_");
-			 * if(spltFN!=null && spltFN.length>0) { fileNamPrfix = spltFN[0]; } } }
-			 */
 		} catch (Exception e) {
 			LOGGER.error("Exception found in FileProcessService@csvfileProcessMethod Method : {}", e);
 		} finally {
-			if(reader!=null) {
-				try {
-					reader.close();
-				} catch (IOException e) {
-					// TODO Auto-generated catch block
-					e.printStackTrace();
-				}reader=null;
-			}
-			if(csvParser!=null) {
-				try {
-					csvParser.close();
-				} catch (IOException e) {
-					// TODO Auto-generated catch block
-					e.printStackTrace();
-				}csvParser=null;
-			}
+			if(reader!=null) { try { reader.close(); } catch (IOException e) { e.printStackTrace(); }reader=null; }
+			if(csvParser!=null) { try { csvParser.close(); } catch (IOException e) { e.printStackTrace(); }csvParser=null;}
+			mapObj = null; mapOfFinaldata = null;  mappObjLst = null; finalDataLst =  null;  fileName = null;  fileNamePrefix = null;
 			LOGGER.info("FileProcessService@csvfileProcessMethod End.........");
 		}
 	}
@@ -178,26 +153,142 @@ public class FileProcessService {
 			if (StringUtils.isNotBlank(amlTableName)) {
 				amlTableName = amlTableName.toUpperCase();
 				nrtFileBsupdObj.batchInsert(amlTableName, finalDataLst, uniqueId);
-				/*
-				 * switch (amlTableName) { case "FS_ACCOUNT_DETAILS":
-				 * //nrtFileBsupdObj.accountDetailsUpdate(finalDataLst);
-				 * nrtFileBsupdObj.batchInsert("FS_ACCOUNT_DETAILS", finalDataLst); break; case
-				 * "FS_ACCOUNT_FEATURES": break; case "FS_ACCOUNT_IMPORT": break; case
-				 * "FS_ACCOUNT_STATUS": break; case "FS_BRANCH": break; case
-				 * "FS_CBWT_TRN_REPORT": break; case "FS_CHEQUE": break; case "FS_CNTRY": break;
-				 * case "FS_CURM": break; case "FS_CUST": break; case "FS_INSTRUMENTS": break;
-				 * case "FS_JTH": break; case "FS_LCKR": break; case "FS_MAB": break; case
-				 * "FS_MINOR": break; case "FS_NCUST": break; case "FS_NOM": break; case
-				 * "FS_PRD": break; case "FS_TRANS_TYPE": break; case "FS_TRANSACTION_FEATURE":
-				 * break; case "FS_TRN": break; default: break; }
-				 */
 			}
-
 		} catch (Exception e) {
 			LOGGER.error("Exception found in toFindTableInsertUpd Method : {}", e);
 		} finally {
 
 		}
 	}
-
+	
+	/**
+	 * 
+	 * @param xlsxPathParam
+	 * @param processCsvPathParam
+	 */
+	public void xlsProcess(Path xlsxPathParam, String processCsvPathParam) {
+		LOGGER.info("FileProcessService@xlsProcess Method Called.........");
+		String xlsxFileName = null; Workbook workbook = null; Sheet sheet = null; Row headerRow = null;
+		Map<String, List<MapperSummarizationFiledImpl>> mapObj = null;
+		List<MapperSummarizationFiledImpl> mappObjLst = null;
+		List<Map<String, Object>> finalDataLst =  null;
+		Map<String, Object> mapOfFinaldata = null;
+		String fileName = null; String fileNamePrefix = null;
+		Map<String, Integer> headerMap = null;
+		try {
+			
+			mapOfFinaldata =  new HashMap<>();
+			finalDataLst = new ArrayList<>();
+			fileName = xlsxPathParam.getFileName().toString();
+			fileNamePrefix = StringUtils.substringBefore(fileName, "_");
+			LOGGER.debug("FileProcessService@csvfileProcessMethod - fileNamePrefix : [{}]", fileNamePrefix);
+			mapObj = fileMapper.toGetTranNRTMapfromRedis();
+			
+			Path destinationDir = Paths.get(processCsvPathParam);
+			if (!Files.exists(destinationDir)) {
+				Files.createDirectories(destinationDir);
+				LOGGER.info("Created destination folder: [{}]", destinationDir);
+			}
+			if (xlsxPathParam != null && Files.exists(xlsxPathParam) && Files.isRegularFile(xlsxPathParam)) {
+				xlsxFileName = xlsxPathParam.getFileName().toString();
+				LOGGER.info("Elcel XLSX file Name is : [{}]", xlsxFileName);
+			}
+			
+			if (xlsxPathParam.toString().endsWith(".xlsx")) {
+				LOGGER.info("[XLSX] File is detected......");
+				workbook = new XSSFWorkbook(Files.newInputStream(xlsxPathParam));
+			} else if (xlsxPathParam.toString().endsWith(".xls")) {
+				LOGGER.info("[XLS] File is detected......");
+				workbook = new HSSFWorkbook(Files.newInputStream(xlsxPathParam));
+			} else {
+				// throw new IllegalArgumentException("Unsupported file type");
+			}
+			if (workbook != null) {
+				// Read header row
+				sheet = workbook.getSheetAt(0);
+				headerRow = sheet.getRow(0);
+				
+				if (mapObj != null && mapObj.size() > 0) {
+					LOGGER.warn("Mapping Table MAP is available - Size : {}", mapObj.size());
+					mappObjLst = mapObj.get(AMLConstants.NRTFILES + fileNamePrefix);
+					if (mappObjLst != null && mappObjLst.size() > 0) {
+						LOGGER.warn("Mapping Table MAP  is available - Size : {}", mapObj.size());
+						Integer recordCount = 0;
+						boolean listImplflg = false;	
+						String amlTableName = null;
+						String uniqueId = null;
+						/*
+						 * List<String> headers = new ArrayList<>(); headerRow.forEach(cell ->
+						 * headers.add(cell.getStringCellValue()));
+						 */
+						headerMap = new HashMap<>();
+						for (Cell cell : headerRow) {
+							headerMap.put(cell.getStringCellValue().trim(), cell.getColumnIndex());
+						}
+						
+						for (int i = 1; i <= sheet.getLastRowNum(); i++) {
+							Row row = sheet.getRow(i);
+							mapOfFinaldata = new HashMap<>();
+							for (MapperSummarizationFiledImpl mappSummFilDto : mappObjLst) {
+								String csvColumnName = mappSummFilDto.getFieldName();
+								if (StringUtils.isBlank(amlTableName)) { amlTableName = mappSummFilDto.getTableName(); }
+								if (StringUtils.isBlank(uniqueId)) { uniqueId = mappSummFilDto.getWhereClauseCloumn();}
+								String amlColumnName = mappSummFilDto.getColumnName();
+								if (StringUtils.isNotBlank(amlColumnName)) {
+									 mapOfFinaldata.put(amlColumnName.toLowerCase(), row.getCell(headerMap.get(csvColumnName)));
+								}
+							}
+							finalDataLst.add(mapOfFinaldata);
+							LOGGER.info("recordCount : [{}] - finalDataLst - [{}]", recordCount, finalDataLst.size());
+							if(recordCount == 1000 && finalDataLst!=null && finalDataLst.size()==1000) {
+								toFindTableInsertUpd(amlTableName, finalDataLst, uniqueId);
+								recordCount = 0;finalDataLst = new ArrayList<>();
+								listImplflg = true;
+							}
+							recordCount++; row = null;
+						}
+						if(!listImplflg) {
+							if (StringUtils.isNotBlank(amlTableName) && finalDataLst != null && finalDataLst.size() > 0) {
+								toFindTableInsertUpd(amlTableName, finalDataLst,uniqueId);
+							}
+						}
+					} else { LOGGER.warn("Mapping Table is available - Size : {}", mapObj.size());}
+				}  else { LOGGER.warn("Mapping Table is empty / not found"); }
+				
+				/*
+				 * sheet.forEach(row -> { if (row.getRowNum() == 0) return; csvColumnName});
+				 */
+				workbook.close(); workbook = null;
+				
+				String currentDateNmFldr = new SimpleDateFormat("yyyyMMdd").format(new Date());
+				if(fileProcessProConfig.isIsmove()) {
+					// To move into current data folder
+					//Path toPath = Paths.get(DESTINATION_CSV_FOLDER +"/"+ currentDateNmFldr+"/", csvFileName);
+					Path toPath = Paths.get(fileProcessProConfig.getProcessedpath() + "/" + currentDateNmFldr + "/");
+					LOGGER.info("Before Create destination folder: {}", toPath);
+					if (!Files.exists(toPath)) {
+						Files.createDirectories(toPath);
+						LOGGER.info("After Created destination folder: {}", toPath);
+					}
+					toPath = Paths.get(fileProcessProConfig.getProcessedpath() + "/" + currentDateNmFldr + "/", fileName);
+					LOGGER.info("Completed from file path : {}", xlsxPathParam);
+					LOGGER.info("Completed to file path : {}", toPath);
+					commonUtils.toMove(xlsxPathParam, toPath);
+				} else if(fileProcessProConfig.isIsdelete()) {
+					LOGGER.info("Deleting file : {}", xlsxPathParam.toString());
+					commonUtils.toDelete(xlsxPathParam.toString());
+				}
+				
+			} else {
+				LOGGER.info("Work Book Not Found : [{}]", workbook);
+			}
+		} catch (Exception e) {
+			LOGGER.error("Exception found in FileProcessService@xlsProcess : {}", e);
+		} finally {
+			xlsxFileName = null;workbook = null; sheet = null; headerRow = null;
+			mapObj = null; mappObjLst = null; finalDataLst =  null;  mapOfFinaldata = null; 
+			fileName = null; fileNamePrefix = null;  headerMap = null;
+			LOGGER.info("FileProcessService@xlsProcess Method End.........");
+		}
+	}
 }

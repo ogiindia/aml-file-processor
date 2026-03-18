@@ -12,7 +12,8 @@ public class DateFormatUtils {
 
 	// List of possible formats you expect
 	private static final String[] DATE_PATTERNS = 
-		{ "dd-MM-yyyy",
+		{ "dd-MM-yyyy","dd-MMM-yyyy",
+		  "dd-MMM-yy hh.mm.ss.nnnnnnnnn a",
 		  "yyyy-MM-dd HH:mm:ss", 
 		  "yyyy-MM-dd", 
 		  "dd/MM/yyyy", 
