@@ -50,6 +50,17 @@ public class FileProcessService {
 	
 	@Autowired
 	CommonUtils commonUtils;
+	
+	/*
+	 * @Autowired ParquetFileConverterService parquetFileConverterService;
+	 */
+	
+	 private final ParquetFileConverterService converterService;
+
+	    // Constructor injection
+	    public FileProcessService(ParquetFileConverterService converterService) {
+	        this.converterService = converterService;
+	    }
 
 	/**
 	 * 
@@ -289,6 +300,69 @@ public class FileProcessService {
 			mapObj = null; mappObjLst = null; finalDataLst =  null;  mapOfFinaldata = null; 
 			fileName = null; fileNamePrefix = null;  headerMap = null;
 			LOGGER.info("FileProcessService@xlsProcess Method End.........");
+		}
+	}
+	
+	/**
+	 * 
+	 * @param filePathParam
+	 * @param processCsvPathParam
+	 */
+	public void createParquteFiles(Path filePathParam, String processCsvPathParam) {
+		LOGGER.info("FileProcessService@createParquteFiles Method Called.........");
+		String currentDateNmFldr = new SimpleDateFormat("yyyyMMdd").format(new Date());
+		String fileName = null;
+		try {
+			Path destinationDir = Paths.get(processCsvPathParam);
+			if (!Files.exists(destinationDir)) {
+				Files.createDirectories(destinationDir);
+				LOGGER.info("Created destination folder: [{}]", destinationDir);
+			}
+			if (filePathParam != null && Files.exists(filePathParam) && Files.isRegularFile(filePathParam)) {
+				fileName = filePathParam.getFileName().toString();
+				LOGGER.info("Elcel XLSX file Name is : [{}]", filePathParam);
+			}
+			
+			if (filePathParam.toString().endsWith(AMLConstants.XLSX_FORMAT)) {
+				LOGGER.info("[XLSX] File is detected......");
+				//converterService.convertExcelToParquet(filePathParam.toAbsolutePath().toString(), fileProcessProConfig.getParqutefilepath()+"/"+currentDateNmFldr);
+			} else if (filePathParam.toString().endsWith(AMLConstants.XLS_FORMAT)) {
+				LOGGER.info("[XLS] File is detected......");
+				//converterService.convertExcelToParquet(filePathParam.toAbsolutePath().toString(), fileProcessProConfig.getParqutefilepath()+"/"+currentDateNmFldr);
+				
+			} else if (filePathParam.toString().endsWith(AMLConstants.CSV_FORMAT)) {
+				LOGGER.info("[CSV] File is detected......");
+				converterService.convertCsvToParquet(filePathParam.toAbsolutePath().toString(), fileProcessProConfig.getParqutefilepath()+"/"+currentDateNmFldr);
+				
+			} else if (filePathParam.toString().endsWith(AMLConstants.XML_FORMAT)) {
+				LOGGER.info("[XML] File is detected......");
+				//converterService.convertXmlToParquet(filePathParam.toAbsolutePath().toString(), fileProcessProConfig.getParqutefilepath()+"/"+currentDateNmFldr,fileProcessProConfig.getXmlroottag());
+			} else {
+				
+			}
+			
+			
+			if(fileProcessProConfig.isIsmove()) {
+				// To move into current data folder
+				//Path toPath = Paths.get(DESTINATION_CSV_FOLDER +"/"+ currentDateNmFldr+"/", csvFileName);
+				Path toPath = Paths.get(fileProcessProConfig.getProcessedpath() + "/" + currentDateNmFldr + "/");
+				LOGGER.info("Before Create destination folder: {}", toPath);
+				if (!Files.exists(toPath)) {
+					Files.createDirectories(toPath);
+					LOGGER.info("After Created destination folder: {}", toPath);
+				}
+				toPath = Paths.get(fileProcessProConfig.getProcessedpath() + "/" + currentDateNmFldr + "/", fileName);
+				LOGGER.info("Completed from file path : {}", filePathParam);
+				LOGGER.info("Completed to file path : {}", toPath);
+				commonUtils.toMove(filePathParam, toPath);
+			} else if(fileProcessProConfig.isIsdelete()) {
+				LOGGER.info("Deleting file : {}", filePathParam.toString());
+				commonUtils.toDelete(filePathParam.toString());
+			}
+		} catch (Exception e) {
+			LOGGER.error("Exception found in FileProcessService@createParquteFiles : {}",e);
+		} finally {
+			LOGGER.info("FileProcessService@createParquteFiles Method End.........");
 		}
 	}
 }

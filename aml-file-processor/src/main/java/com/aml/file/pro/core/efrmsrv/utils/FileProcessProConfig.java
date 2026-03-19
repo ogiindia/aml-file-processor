@@ -20,6 +20,8 @@ public class FileProcessProConfig {
 	private String txntablenameprefix;
 	private Integer batchcount;
 	private String dbtype;
+	private String parqutefilepath;
+	private String xmlroottag;
 	
 	public String getSourcepath() {
 		return sourcepath;
@@ -125,4 +127,20 @@ public class FileProcessProConfig {
 		this.dbtype = dbtype;
 	}
 
+	public String getParqutefilepath() {
+		return parqutefilepath;
+	}
+
+	public void setParqutefilepath(String parqutefilepath) {
+		this.parqutefilepath = parqutefilepath;
+	}
+
+	public String getXmlroottag() {
+		return xmlroottag;
+	}
+
+	public void setXmlroottag(String xmlroottag) {
+		this.xmlroottag = xmlroottag;
+	}
+	
 }

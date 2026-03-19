@@ -71,4 +71,8 @@ public class DateFormatUtils {
 	    }
 	    return false;
 	}
+	
+	public long getCurrentTIme() {
+		return new Date().getTime();
+	}
 }

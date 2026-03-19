@@ -53,9 +53,16 @@ public class NRTFileWatcher {
 	FileMapper fileMapper;
 	
 	Long startDateMain = new Date().getTime();
+	
+	
 
 	@PostConstruct
 	void nrtTransFileWatcher() {
+		System.setProperty("parquet.columnwriter.version", "v1");   // force old writer
+	    System.setProperty("parquet.statistics.enabled", "false");  // disable stats entirely
+	    System.setProperty("parquet.bloom.filter.enabled", "false"); // extra safety
+
+	    // start Spring / your app...
 		LOGGER.info("-------------------START");
 		try {
 			Thread thread = new Thread(() -> {
@@ -90,8 +97,8 @@ public class NRTFileWatcher {
 											Long startDate = new Date().getTime();
 											LOGGER.info("NRTFileWatcher CSV Import Start Time : [{}]", startDate);
 											
-											//process
-											fileProcessService.csvfileProcessMethod(csvFilePath, fileProcessProConfig.getDestinationpath());
+											// process Direct Insert
+											//fileProcessService.csvfileProcessMethod(csvFilePath, fileProcessProConfig.getDestinationpath());
 											
 											Long endTime = new Date().getTime();
 											LOGGER.info("NRTFileWatcher CSV Import - Total time : {}", commonUtils.findIsHourMinSec((endTime - startDate)));
@@ -116,9 +123,10 @@ public class NRTFileWatcher {
 												Long startDate = new Date().getTime();
 												LOGGER.info("NRTFileWatcher CSV Import Start Time : [{}]", startDate);
 
-												// process
-												fileProcessService.csvfileProcessMethod(csvFilePath, fileProcessProConfig.getDestinationpath());
-
+												// process Direct Insert
+												//fileProcessService.csvfileProcessMethod(csvFilePath, fileProcessProConfig.getDestinationpath());
+												// process using parqute file
+												fileProcessService.createParquteFiles(csvFilePath, fileProcessProConfig.getDestinationpath());
 												Long endTime = new Date().getTime();
 												LOGGER.info("NRTFileWatcher CSV Import - Total time : [{}]", commonUtils.findIsHourMinSec((endTime - startDate)));
 											}
@@ -147,16 +155,15 @@ public class NRTFileWatcher {
 												Long startDate = new Date().getTime();
 												LOGGER.info("NRTFileWatcher XLS/XLSX Import Start Time : [{}]", startDate);
 
-												// process
-												fileProcessService.xlsProcess(csvFilePath, fileProcessProConfig.getDestinationpath());
-
+												// process Direct Insert
+												//fileProcessService.xlsProcess(csvFilePath, fileProcessProConfig.getDestinationpath());
+												// process using parqute file
+												fileProcessService.createParquteFiles(csvFilePath, fileProcessProConfig.getDestinationpath());
 												Long endTime = new Date().getTime();
 												LOGGER.info("NRTFileWatcher XLS/XLSX Import - Total time : [{}]", commonUtils.findIsHourMinSec((endTime - startDate)));
 											}
 										}
-									} catch (Exception e) {
-										LOGGER.error("Exception found in watchDirectory : {}", e);
-									}
+									} catch (Exception e) { LOGGER.error("Exception found in watchDirectory : {}", e); }
 									LOGGER.info("File format {} block End.", AMLConstants.XLSX_FORMAT +"/" + AMLConstants.XLS_FORMAT);
 								}
 							
@@ -231,7 +238,13 @@ public class NRTFileWatcher {
 		long count = 0;
 		try {
 			currentDateNmFldr = new SimpleDateFormat("yyyyMMdd").format(new Date());
-			toPath = Paths.get(fileProcessProConfig.getDestinationpath() + "/" + currentDateNmFldr + "/");
+			toPath = Paths.get(fileProcessProConfig.getProcessedpath() + "/" + currentDateNmFldr + "/");
+			
+			if (!Files.exists(toPath)) {
+				Files.createDirectories(toPath);
+				LOGGER.info("After Created destination folder: {}", toPath);
+			}
+			
 			LOGGER.info("Get File Count - CSV/XLS/XLSX Folder Path : [{}]",toPath);
 			// while(true) {
 			if (toPath != null) {
