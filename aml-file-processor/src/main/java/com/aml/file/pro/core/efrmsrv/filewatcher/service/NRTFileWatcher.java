@@ -179,10 +179,8 @@ public class NRTFileWatcher {
 									publishData2Kafka.sendtoKafka(finSecIndicatorVOoBj.getUuid(), finSecIndicatorVOoBj, AMLConstants.KAFKA_PUB_TOPIC);
 									
 									Long endTime = new Date().getTime();
-									LOGGER.info("Total file processed time : {}", commonUtils.findIsHourMinSec((endTime - startDateMain)));
-									
+									LOGGER.info("Total file processed time : {}", commonUtils.findIsHourMinSec((endTime - startDateMain)));	
 								}
-								
 								// File fetch interval on each.
 								Thread.sleep(fileProcessProConfig.getFetchinterval());
 							}
@@ -191,17 +189,13 @@ public class NRTFileWatcher {
 					}
 				} catch (Exception e) {
 					LOGGER.info("Exception found in NRTFileWatcher@nrtTransFileWatcher [INSIDE CATCH]: {}", e);
-				} finally {
-
-				}
+				} finally { }
 			});
 			thread.setDaemon(true);
 			thread.start();
 		} catch (Exception e) {
 			LOGGER.info("Exception found in NRTFileWatcher@nrtTransFileWatcher [OUTSIDE CATCH]: {}", e);
-		} finally {
-
-		}
+		} finally { }
 	}
 
 	/**
@@ -240,10 +234,7 @@ public class NRTFileWatcher {
 			currentDateNmFldr = new SimpleDateFormat("yyyyMMdd").format(new Date());
 			toPath = Paths.get(fileProcessProConfig.getProcessedpath() + "/" + currentDateNmFldr + "/");
 			
-			if (!Files.exists(toPath)) {
-				Files.createDirectories(toPath);
-				LOGGER.info("After Created destination folder: {}", toPath);
-			}
+			if (!Files.exists(toPath)) { Files.createDirectories(toPath); LOGGER.info("After Created destination folder: {}", toPath); }
 			
 			LOGGER.info("Get File Count - CSV/XLS/XLSX Folder Path : [{}]",toPath);
 			// while(true) {
@@ -260,9 +251,7 @@ public class NRTFileWatcher {
 			} // Thread.sleep(6000);}
 		} catch (Exception e) {
 			LOGGER.error("Exception found in NRTFileWatcher@fileWatcherTogetCount : {}", e);
-		} finally {
-			 currentDateNmFldr = null; toPath = null;
-		}
+		} finally {  currentDateNmFldr = null; toPath = null; }
 		LOGGER.info("::::::::::::NRTFileWatcher@packageWatcherToChkFileCntReached method end.:::::\n");
 		return cbsFileImportStatus;
 	}

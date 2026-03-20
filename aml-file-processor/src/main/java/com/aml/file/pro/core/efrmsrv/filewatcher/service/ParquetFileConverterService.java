@@ -3,13 +3,18 @@ package com.aml.file.pro.core.efrmsrv.filewatcher.service;
 import java.io.FileReader;
 import java.io.IOException;
 import java.math.BigDecimal;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.sql.Timestamp;
+import java.text.SimpleDateFormat;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Date;
+import java.util.List;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.parquet.example.data.Group;
@@ -19,6 +24,14 @@ import org.apache.parquet.hadoop.example.ExampleParquetWriter;
 import org.apache.parquet.hadoop.util.HadoopOutputFile;
 import org.apache.parquet.schema.MessageType;
 import org.apache.parquet.schema.MessageTypeParser;
+import org.apache.poi.hssf.usermodel.HSSFWorkbook;
+import org.apache.poi.ss.usermodel.Cell;
+import org.apache.poi.ss.usermodel.CellType;
+import org.apache.poi.ss.usermodel.DateUtil;
+import org.apache.poi.ss.usermodel.Row;
+import org.apache.poi.ss.usermodel.Sheet;
+import org.apache.poi.ss.usermodel.Workbook;
+import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -44,10 +57,13 @@ public class ParquetFileConverterService {
 	 * @throws CsvException
 	 */
 	 public void convertCsvToParquet(String csvPath, String parquetPath) throws IOException, CsvException {
-	        try (CSVReader reader = new CSVReader(new FileReader(csvPath))) {
+		 String schemaString = null;MessageType schema = null;
+		  SimpleGroupFactory factory = null;
+		  Configuration conf = null;
+		 try (CSVReader reader = new CSVReader(new FileReader(csvPath))) {
 	            // 1) Read header row (dynamic column names)
 	            String[] headers = reader.readNext();
-	            String[] firstRow = reader.readNext();     // first data row
+	            String[] firstRow = reader.readNext();// first data row
 	            if (headers == null) {
 	                throw new IllegalArgumentException("Empty CSV file, no header row found");
 	            }
@@ -60,26 +76,24 @@ public class ParquetFileConverterService {
 	                columnTypes[i] = inferTypeFromValue(value,colName);  // STRING / INT / LONG / DOUBLE / BOOLEAN
 	            }
 	            
-	            // 2) Build dynamic Parquet schema from headers
-	            //    Here we make every column: optional binary <name> (UTF8)
-	           // StringBuilder sb = new StringBuilder("message dynamic_schema {\n");
-	           
-	            String schemaString = buildSchemaString(headers, columnTypes);
+	            // 2) Build dynamic Parquet schema from headers - Here we make every column: optional binary <name> (UTF8)	          
+	            schemaString = buildSchemaString(headers, columnTypes);
 	            LOGGER.info("Parquet schema: {}",schemaString);
-	            MessageType schema = MessageTypeParser.parseMessageType(schemaString);
-	            SimpleGroupFactory factory = new SimpleGroupFactory(schema);
+	            schema = MessageTypeParser.parseMessageType(schemaString);
+	            factory = new SimpleGroupFactory(schema);
 
-	         // After you have built the schema:
-	            LOGGER.info("---- EFFECTIVE PARQUET SCHEMA ----");
-	            LOGGER.info(schema.toString());      // if you have org.apache.parquet.schema.MessageType
-	            // or, if you use a string:
-	            LOGGER.info(schemaString);
-	            LOGGER.info("---- END SCHEMA ----");
+	            // After you have built the schema:
+	            LOGGER.debug("---- EFFECTIVE PARQUET SCHEMA ----");
+	            LOGGER.debug(schema.toString());      // if you have org.apache.parquet.schema.MessageType or, if you use a string:
+	            LOGGER.debug(schemaString);
+	            LOGGER.debug("---- END SCHEMA ----");
 	            
 	            java.nio.file.Path localPath = Paths.get(parquetPath+"/output_"+new Date().getTime()+".parquet");
             	org.apache.hadoop.fs.Path hadoopPath = new org.apache.hadoop.fs.Path(localPath.toUri());
-            	Configuration conf = new Configuration();
-	            
+            	conf = new Configuration();
+            	conf.setBoolean("dfs.client.write.checksum", false);
+            	conf.setBoolean("dfs.client.read.shortcircuit.skip.checksum", true);
+            	conf.set("fs.file.impl", org.apache.hadoop.fs.RawLocalFileSystem.class.getName());
 	            // 3) Create Parquet writer
 				try (ParquetWriter<Group> writer = ExampleParquetWriter
 						.builder(HadoopOutputFile.fromPath(hadoopPath, conf))
@@ -93,11 +107,6 @@ public class ParquetFileConverterService {
 	                    writer.write(g);
 	                }
 					
-					/*
-					 * Group g = factory.newGroup(); writeRow(g, headers, columnTypes, firstRow);
-					 * writer.write(g);
-					 */
-
 	            	// then remaining rows
 	            	String[] row;
 	            	while ((row = reader.readNext()) != null) {
@@ -111,39 +120,192 @@ public class ParquetFileConverterService {
 
 	            LOGGER.info("Wrote parquet file: {}", parquetPath);
 	            LOGGER.info("Columns: {}", Arrays.toString(headers));
+	        } catch(Exception e) {
+	        	LOGGER.error("Exception found in ParquetFileConverterService@convertCsvToParquet : {}",e);
+	        } finally {
+	        	schemaString = null; schema = null; factory = null; conf = null;
 	        }
-	    }
+	 }
+	 
+	 public void convertXlsXlsxToParqute(Path xlsxPathParam, String parquetPath) {
+		 LOGGER.info("convertXlsXlsxToParqute Method Called......");
+		 Workbook workbook = null; Sheet sheet = null; Row headerRow = null;
+		 String xlsxFileName =null; Path destinationDir = null;
+		 String schemaString = null;MessageType schema = null;
+		  SimpleGroupFactory factory = null;
+		  Configuration conf = null;
+		  String praquteFileName = null;
+		 try {
+				destinationDir = Paths.get(parquetPath);
+				if (!Files.exists(destinationDir)) {
+					Files.createDirectories(destinationDir);
+					LOGGER.info("Created destination folder: [{}]", destinationDir);
+				}
+				if (xlsxPathParam != null && Files.exists(xlsxPathParam) && Files.isRegularFile(xlsxPathParam)) {
+					xlsxFileName = xlsxPathParam.getFileName().toString();
+					LOGGER.info("Elcel XLSX file Name is : [{}]", xlsxFileName);
+					praquteFileName = xlsxFileName.substring(0, xlsxFileName.lastIndexOf("."));
+				}
+			 
+				if (xlsxPathParam.toString().endsWith(".xlsx")) {
+					LOGGER.info("[XLSX] File is detected......");
+					workbook = new XSSFWorkbook(Files.newInputStream(xlsxPathParam));
+				} else if (xlsxPathParam.toString().endsWith(".xls")) {
+					LOGGER.info("[XLS] File is detected......");
+					workbook = new HSSFWorkbook(Files.newInputStream(xlsxPathParam));
+				} else {
+					// throw new IllegalArgumentException("Unsupported file type");
+				}
+				
+				if (workbook != null) {
+					// Read header row
+					sheet = workbook.getSheetAt(0);
+					headerRow = sheet.getRow(0);
+										
+					List<String> headerList = new ArrayList<>();
+					for (Cell cell : headerRow) {
+						headerList.add(cell.getStringCellValue().trim());
+					}
+					int colCount = headerList.size();
+					String[] columnTypes = new String[colCount];
+					Row row = sheet.getRow(0);
+					 
+					String[] firstRow = new String[colCount];
+					//First Row 
+					for (int i = 0; i < colCount; i++) {
+						firstRow[i]=row.getCell(i).toString();
+						String value = (row != null) ? row.getCell(i, Row.MissingCellPolicy.RETURN_BLANK_AS_NULL).toString() : null;
+						String colName = headerList.get(i).trim().replaceAll("\\s+", "_");
+						columnTypes[i] = inferTypeFromValue(value, colName); // STRING / INT / LONG / DOUBLE / BOOLEAN
+						
+					}
+					String[] headerArray = headerList.toArray(new String[0]);
+					// 2) Build dynamic Parquet schema from headers - Here we make every column: optional binary <name> (UTF8)
+					schemaString = buildSchemaString(headerArray, columnTypes);
+					LOGGER.info("Parquet schema: {}", schemaString);
+					schema = MessageTypeParser.parseMessageType(schemaString);
+					factory = new SimpleGroupFactory(schema);
+					 // After you have built the schema:
+		            LOGGER.debug("---- EFFECTIVE PARQUET SCHEMA ----");
+		            LOGGER.debug(schema.toString());      // if you have org.apache.parquet.schema.MessageType or, if you use a string:
+		            LOGGER.debug(schemaString);
+		            LOGGER.debug("---- END SCHEMA ----");
+		            
+		            java.nio.file.Path localPath = Paths.get(parquetPath+"/"+praquteFileName+"_"+new Date().getTime()+".parquet");
+	            	LOGGER.info("Parqute File Name : [{}]",localPath);
+		            org.apache.hadoop.fs.Path hadoopPath = new org.apache.hadoop.fs.Path(localPath.toUri());
+	            	conf = new Configuration(); 
+	            	conf.setBoolean("dfs.client.write.checksum", false);
+	            	conf.setBoolean("dfs.client.read.shortcircuit.skip.checksum", true);
+	            	conf.set("fs.file.impl", org.apache.hadoop.fs.RawLocalFileSystem.class.getName());
+	            	 // 3) Create Parquet writer
+					try (ParquetWriter<Group> writer = ExampleParquetWriter
+							.builder(HadoopOutputFile.fromPath(hadoopPath, conf))
+							.withConf(conf)
+							.withType(schema).build()) {
+		            	
+						// write firstRow if present
+						if (firstRow != null) {
+							Group g = factory.newGroup();
+							writeRow(g, headerArray, columnTypes, firstRow);
+							writer.write(g);
+						}
+		                
+						for (int i = 1; i <= sheet.getLastRowNum(); i++) {
+							Row rowRemain = sheet.getRow(i);
+							String[] rowRm = new String[rowRemain.getLastCellNum()];
+							for (int cell = 0; cell < rowRemain.getLastCellNum(); cell++) {
+								Cell rowCell = rowRemain.getCell(cell);
+							
+								CellType celTyp = null;
+								if(rowCell!=null) {
+									celTyp = rowCell.getCellType();
+								}
+								String value="";
+								if (rowCell != null && celTyp!=null) {
+								switch (celTyp) {
+								    case STRING:
+								        value = rowCell.getStringCellValue();
+								        break;
+								    case NUMERIC:
+								        value = String.valueOf(rowCell.getNumericCellValue());
+								        if (DateUtil.isCellDateFormatted(rowCell)) {
+								            // Convert to LocalDate or keep as Date
+								            Date date = rowCell.getDateCellValue();
+								            // Example: format as yyyy-MM-dd
+								            value = new SimpleDateFormat("yyyy-MM-dd").format(date);
+								        } else {
+								            value = String.valueOf(rowCell.getNumericCellValue());
+								        }
+								        break;
+								    case BOOLEAN:
+								        value = String.valueOf(rowCell.getBooleanCellValue());
+								        break;
+									case FORMULA:
+										value = rowCell.getCellFormula();
+										break;
+									case BLANK:
+										value =  "";
+										break;
+									default:
+								        value = "";
+								}
+								}
+								rowRm[cell]=value;
+							}
 
-	    private String inferTypeFromValue(String value, String colName) {
-	    	try {
-	        if (value == null || value.isEmpty()) return "STRING";
+							if (rowRm != null) {
+								Group grp = factory.newGroup();
+								writeRow(grp, headerArray, columnTypes, rowRm);
+								writer.write(grp);
+							}
+		                }
+		            	writer.close(); 
+		            }
 
-	        if (value.equalsIgnoreCase("true") || value.equalsIgnoreCase("false"))
-	            return "BOOLEAN";
+					LOGGER.info("Wrote parquet file: {}", parquetPath);
+					LOGGER.info("Columns: {}", Arrays.toString(headerArray));
+				}
+			} catch (Exception e) {
+				LOGGER.error("Exception found in ParquetFileConverterService@convertCsvToParquet : {}", e);
+			} finally {
+				schemaString = null; schema = null; factory = null; conf = null;
+			}
+	 }
+	 	/**
+	 	 * 
+	 	 * @param value
+	 	 * @param colName
+	 	 * @return
+	 	 */
+	private String inferTypeFromValue(String value, String colName) {
+		try {
+	    		if (value == null || value.isEmpty()) return "STRING";
+
+	    		if (value.equalsIgnoreCase("true") || value.equalsIgnoreCase("false"))
+	    			return "BOOLEAN";
 	        
-	        String lowerName = colName.toLowerCase();
-	        String trimmed = value.trim();
-	     // 1) Geometry (simple WKT detection)
-	        if (lowerName.contains("geom") || lowerName.contains("wkt")
-	            || trimmed.startsWith("POINT(")
-	            || trimmed.startsWith("LINESTRING(")
-	            || trimmed.startsWith("POLYGON(")) {
-	            return "GEOMETRY";
-	        }
-	        try { Integer.parseInt(value); return "INT"; } catch (NumberFormatException ignored) {}
-	        try { Long.parseLong(value);    return "LONG"; } catch (NumberFormatException ignored) {}
-	        try { Double.parseDouble(value);return "DOUBLE"; } catch (NumberFormatException ignored) {}
-	        try {  BigDecimal bd = new BigDecimal(value).setScale(2);  long unscaled = bd.unscaledValue().longValueExact();return "DECIMAL"; } catch (Exception ignored) {}
-	        try {  if(dateFormatUtils.isDate(value)) {return "TIMESTAMP";}  } catch (Exception ignored) {}
-	        
-	    	} catch (Exception e) {
-	    		LOGGER.error("Exception found in inferTypeFromValue : {}",e);
-	    	} finally {
-	    		
-	    	}
+	    		String lowerName = colName.toLowerCase();
+	    		String trimmed = value.trim();
+	    		// 1) Geometry (simple WKT detection)
+		        if (lowerName.contains("geom") || lowerName.contains("wkt")
+		            || trimmed.startsWith("POINT(")
+		            || trimmed.startsWith("LINESTRING(")
+		            || trimmed.startsWith("POLYGON(")) {
+		            return "GEOMETRY";
+		        }
+		        try { Integer.parseInt(value); return "INT"; } catch (NumberFormatException ignored) {}
+		        try { Long.parseLong(value);    return "LONG"; } catch (NumberFormatException ignored) {}
+		        try { Double.parseDouble(value);return "DOUBLE"; } catch (NumberFormatException ignored) {}
+		        try {  BigDecimal bd = new BigDecimal(value).setScale(2);  long unscaled = bd.unscaledValue().longValueExact();return "DECIMAL"; } catch (Exception ignored) {}
+		        try {  if(dateFormatUtils.isDate(value)) {return "TIMESTAMP";}  } catch (Exception ignored) {}
+		        
+			} catch (Exception e) {
+				LOGGER.error("Exception found in inferTypeFromValue : {}",e);
+	    	} finally { }
 	    	return "STRING";
-	    }  
-	    
+		}
+
 	    // -------- schema builder --------
 	    private static String buildSchemaString(String[] headers, String[] columnTypes) {
 	    	
@@ -193,6 +355,13 @@ public class ParquetFileConverterService {
 	        return sb.toString();
 	    }
 	    
+	    /**
+	     * 
+	     * @param g
+	     * @param headers
+	     * @param columnTypes
+	     * @param row
+	     */
 	    private void writeRow(Group g, String[] headers, String[] columnTypes, String[] row) {
 	        for (int i = 0; i < headers.length; i++) {
 	            String colName = headers[i].trim().replaceAll("\\s+", "_");
@@ -251,6 +420,5 @@ public class ParquetFileConverterService {
 	        Timestamp tmp=  dateFormatUtils.toTimestamp(value);
 	    
 	        return tmp.getTime();  // or ZoneId.systemDefault()
-	    }
-	   
+	    } 
 }

@@ -326,9 +326,11 @@ public class FileProcessService {
 			if (filePathParam.toString().endsWith(AMLConstants.XLSX_FORMAT)) {
 				LOGGER.info("[XLSX] File is detected......");
 				//converterService.convertExcelToParquet(filePathParam.toAbsolutePath().toString(), fileProcessProConfig.getParqutefilepath()+"/"+currentDateNmFldr);
+				converterService.convertXlsXlsxToParqute(filePathParam, fileProcessProConfig.getParqutefilepath()+"/"+currentDateNmFldr);
+				
 			} else if (filePathParam.toString().endsWith(AMLConstants.XLS_FORMAT)) {
 				LOGGER.info("[XLS] File is detected......");
-				//converterService.convertExcelToParquet(filePathParam.toAbsolutePath().toString(), fileProcessProConfig.getParqutefilepath()+"/"+currentDateNmFldr);
+				converterService.convertXlsXlsxToParqute(filePathParam, fileProcessProConfig.getParqutefilepath()+"/"+currentDateNmFldr);
 				
 			} else if (filePathParam.toString().endsWith(AMLConstants.CSV_FORMAT)) {
 				LOGGER.info("[CSV] File is detected......");
