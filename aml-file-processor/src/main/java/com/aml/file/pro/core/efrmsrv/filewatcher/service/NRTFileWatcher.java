@@ -110,27 +110,26 @@ public class NRTFileWatcher {
 									Path fullPath = path.resolve(fileName);
 									// Waiting for file write completion
 									waitForFileCompletion(fullPath);
-
-									String toCsvFileName = fileName.getFileName().toString();
-									Path csvFilePath = Paths.get(fileProcessProConfig.getDestinationpath(), toCsvFileName);
-									commonUtils.toMove(fullPath, csvFilePath);
-									LOGGER.info("###############File moved successfully#############");
+									//String toCsvFileName = fileName.getFileName().toString();
+									//Path csvFilePath = Paths.get(fileProcessProConfig.getSourcepath(), toCsvFileName);
+									//commonUtils.toMove(fullPath, csvFilePath);
+									//LOGGER.info("###############File moved successfully#############");
 									
 									try {
-										if (StringUtils.isNotBlank(toCsvFileName)) {
-											if (csvFilePath != null && Files.exists(csvFilePath)) {
-												LOGGER.info("Final CSV Path and Name after Convert : [{}]", csvFilePath.toString());
+										
+											if (fullPath != null && Files.exists(fullPath)) {
+												LOGGER.info("Final CSV Path and Name after Convert : [{}]", fullPath.toString());
 												Long startDate = new Date().getTime();
 												LOGGER.info("NRTFileWatcher CSV Import Start Time : [{}]", startDate);
 
 												// process Direct Insert
 												//fileProcessService.csvfileProcessMethod(csvFilePath, fileProcessProConfig.getDestinationpath());
 												// process using parqute file
-												fileProcessService.createParquteFiles(csvFilePath, fileProcessProConfig.getDestinationpath());
+												fileProcessService.createParquteFiles(fullPath);
 												Long endTime = new Date().getTime();
 												LOGGER.info("NRTFileWatcher CSV Import - Total time : [{}]", commonUtils.findIsHourMinSec((endTime - startDate)));
 											}
-										}
+										
 									} catch (Exception e) {
 										LOGGER.error("Exception found in watchDirectory : {}", e);
 									}
@@ -142,27 +141,25 @@ public class NRTFileWatcher {
 									Path fullPath = path.resolve(fileName);
 									// Waiting for file write completion
 									waitForFileCompletion(fullPath);
-
-									String toCsvFileName = fileName.getFileName().toString();
-									Path csvFilePath = Paths.get(fileProcessProConfig.getDestinationpath(), toCsvFileName);
-									commonUtils.toMove(fullPath, csvFilePath);
-									LOGGER.info("###############File moved successfully#############");
+									//String toCsvFileName = fileName.getFileName().toString();
+									//Path csvFilePath = Paths.get(fileProcessProConfig.getDestinationpath(), toCsvFileName);
+									//commonUtils.toMove(fullPath, csvFilePath);
+									//LOGGER.info("###############File moved successfully#############");
 									
 									try {
-										if (StringUtils.isNotBlank(toCsvFileName)) {
-											if (csvFilePath != null && Files.exists(csvFilePath)) {
-												LOGGER.info("Final XLS/XLSX Path and Name after Convert : [{}]", csvFilePath.toString());
+										if (fullPath != null && Files.exists(fullPath)) {
+												LOGGER.info("Final XLS/XLSX Path and Name after Convert : [{}]", fullPath.toString());
 												Long startDate = new Date().getTime();
 												LOGGER.info("NRTFileWatcher XLS/XLSX Import Start Time : [{}]", startDate);
 
 												// process Direct Insert
 												//fileProcessService.xlsProcess(csvFilePath, fileProcessProConfig.getDestinationpath());
 												// process using parqute file
-												fileProcessService.createParquteFiles(csvFilePath, fileProcessProConfig.getDestinationpath());
+												fileProcessService.createParquteFiles(fullPath);
 												Long endTime = new Date().getTime();
 												LOGGER.info("NRTFileWatcher XLS/XLSX Import - Total time : [{}]", commonUtils.findIsHourMinSec((endTime - startDate)));
-											}
 										}
+
 									} catch (Exception e) { LOGGER.error("Exception found in watchDirectory : {}", e); }
 									LOGGER.info("File format {} block End.", AMLConstants.XLSX_FORMAT +"/" + AMLConstants.XLS_FORMAT);
 								}

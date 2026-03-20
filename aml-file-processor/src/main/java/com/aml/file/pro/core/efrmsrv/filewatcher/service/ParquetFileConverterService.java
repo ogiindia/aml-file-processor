@@ -8,14 +8,20 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.sql.Timestamp;
 import java.text.SimpleDateFormat;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Date;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
+import org.apache.commons.lang3.StringUtils;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.parquet.example.data.Group;
 import org.apache.parquet.example.data.simple.SimpleGroupFactory;
@@ -23,6 +29,7 @@ import org.apache.parquet.hadoop.ParquetWriter;
 import org.apache.parquet.hadoop.example.ExampleParquetWriter;
 import org.apache.parquet.hadoop.util.HadoopOutputFile;
 import org.apache.parquet.schema.MessageType;
+import org.apache.parquet.hadoop.ParquetFileWriter.Mode;
 import org.apache.parquet.schema.MessageTypeParser;
 import org.apache.poi.hssf.usermodel.HSSFWorkbook;
 import org.apache.poi.ss.usermodel.Cell;
@@ -37,7 +44,11 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
+import com.aml.file.pro.core.efrmsrv.startup.config.JsonConfigLoader;
+import com.aml.file.pro.core.efrmsrv.startup.config.TransactionMapping;
 import com.aml.file.pro.core.efrmsrv.utils.DateFormatUtils;
+import com.aml.file.pro.core.recordDTO.TransactionCustomFieldRDTO;
+import com.google.gson.Gson;
 import com.opencsv.CSVReader;
 import com.opencsv.exceptions.CsvException;
 
@@ -48,6 +59,9 @@ public class ParquetFileConverterService {
 	
 	@Autowired
 	DateFormatUtils dateFormatUtils;
+	
+	@Autowired
+	JsonConfigLoader jsonConfigLoader;
 	
 	/**
 	 * 
@@ -60,6 +74,7 @@ public class ParquetFileConverterService {
 		 String schemaString = null;MessageType schema = null;
 		  SimpleGroupFactory factory = null;
 		  Configuration conf = null;
+		  
 		 try (CSVReader reader = new CSVReader(new FileReader(csvPath))) {
 	            // 1) Read header row (dynamic column names)
 	            String[] headers = reader.readNext();
@@ -78,7 +93,7 @@ public class ParquetFileConverterService {
 	            
 	            // 2) Build dynamic Parquet schema from headers - Here we make every column: optional binary <name> (UTF8)	          
 	            schemaString = buildSchemaString(headers, columnTypes);
-	            LOGGER.info("Parquet schema: {}",schemaString);
+	            //LOGGER.info("Parquet schema: {}",schemaString);
 	            schema = MessageTypeParser.parseMessageType(schemaString);
 	            factory = new SimpleGroupFactory(schema);
 
@@ -88,7 +103,12 @@ public class ParquetFileConverterService {
 	            LOGGER.debug(schemaString);
 	            LOGGER.debug("---- END SCHEMA ----");
 	            
-	            java.nio.file.Path localPath = Paths.get(parquetPath+"/output_"+new Date().getTime()+".parquet");
+	            Path pth = Path.of(csvPath);
+	            LOGGER.info("Source File Name : {}",pth.getFileName().toString());
+	            String parquteName = getParquteFilNameWithPath(pth.getFileName().toString());
+	            LOGGER.info("parquteName File Name and Path : {}",parquteName);
+	            //java.nio.file.Path localPath = Paths.get(parquetPath+"/output_"+new Date().getTime()+".parquet");
+	            java.nio.file.Path localPath = Paths.get(parquteName);
             	org.apache.hadoop.fs.Path hadoopPath = new org.apache.hadoop.fs.Path(localPath.toUri());
             	conf = new Configuration();
             	conf.setBoolean("dfs.client.write.checksum", false);
@@ -98,6 +118,7 @@ public class ParquetFileConverterService {
 				try (ParquetWriter<Group> writer = ExampleParquetWriter
 						.builder(HadoopOutputFile.fromPath(hadoopPath, conf))
 						.withConf(conf)
+						.withWriteMode(Mode.OVERWRITE)
 						.withType(schema).build()) {
 	            	
 					 // write firstRow if present
@@ -115,7 +136,6 @@ public class ParquetFileConverterService {
 	            	    writer.write(grp);
 	            	}
 	            	writer.close(); 
-	   
 	            }
 
 	            LOGGER.info("Wrote parquet file: {}", parquetPath);
@@ -182,7 +202,7 @@ public class ParquetFileConverterService {
 					String[] headerArray = headerList.toArray(new String[0]);
 					// 2) Build dynamic Parquet schema from headers - Here we make every column: optional binary <name> (UTF8)
 					schemaString = buildSchemaString(headerArray, columnTypes);
-					LOGGER.info("Parquet schema: {}", schemaString);
+					//LOGGER.info("Parquet schema: {}", schemaString);
 					schema = MessageTypeParser.parseMessageType(schemaString);
 					factory = new SimpleGroupFactory(schema);
 					 // After you have built the schema:
@@ -190,9 +210,16 @@ public class ParquetFileConverterService {
 		            LOGGER.debug(schema.toString());      // if you have org.apache.parquet.schema.MessageType or, if you use a string:
 		            LOGGER.debug(schemaString);
 		            LOGGER.debug("---- END SCHEMA ----");
+		            //FILENAME/CBS/year/month/date/file
+		           
+		            LOGGER.info("Source File Name ---> : {}",xlsxPathParam.getFileName().toString());
+		            String parquteName = getParquteFilNameWithPath(xlsxPathParam.getFileName().toString());
+		            LOGGER.info("parquteName File Name and Path ---> : {}",parquteName);
+		            //java.nio.file.Path localPath = Paths.get(parquetPath+"/output_"+new Date().getTime()+".parquet");
+		            java.nio.file.Path localPath = Paths.get(parquteName);
 		            
-		            java.nio.file.Path localPath = Paths.get(parquetPath+"/"+praquteFileName+"_"+new Date().getTime()+".parquet");
-	            	LOGGER.info("Parqute File Name : [{}]",localPath);
+		            //java.nio.file.Path localPath = Paths.get(parquetPath+"/"+praquteFileName+"_"+new Date().getTime()+".parquet");
+		            LOGGER.info("Parqute File Name : [{}]",localPath);
 		            org.apache.hadoop.fs.Path hadoopPath = new org.apache.hadoop.fs.Path(localPath.toUri());
 	            	conf = new Configuration(); 
 	            	conf.setBoolean("dfs.client.write.checksum", false);
@@ -202,6 +229,7 @@ public class ParquetFileConverterService {
 					try (ParquetWriter<Group> writer = ExampleParquetWriter
 							.builder(HadoopOutputFile.fromPath(hadoopPath, conf))
 							.withConf(conf)
+							.withWriteMode(Mode.OVERWRITE)
 							.withType(schema).build()) {
 		            	
 						// write firstRow if present
@@ -264,7 +292,7 @@ public class ParquetFileConverterService {
 		            }
 
 					LOGGER.info("Wrote parquet file: {}", parquetPath);
-					LOGGER.info("Columns: {}", Arrays.toString(headerArray));
+					LOGGER.warn("Columns: {}", Arrays.toString(headerArray));
 				}
 			} catch (Exception e) {
 				LOGGER.error("Exception found in ParquetFileConverterService@convertCsvToParquet : {}", e);
@@ -278,7 +306,7 @@ public class ParquetFileConverterService {
 	 	 * @param colName
 	 	 * @return
 	 	 */
-	private String inferTypeFromValue(String value, String colName) {
+	 private String inferTypeFromValue(String value, String colName) {
 		try {
 	    		if (value == null || value.isEmpty()) return "STRING";
 
@@ -307,7 +335,7 @@ public class ParquetFileConverterService {
 		}
 
 	    // -------- schema builder --------
-	    private static String buildSchemaString(String[] headers, String[] columnTypes) {
+	    private String buildSchemaString(String[] headers, String[] columnTypes) {
 	    	
 	        StringBuilder sb = new StringBuilder("message dynamic_schema {\n");
 
@@ -421,4 +449,136 @@ public class ParquetFileConverterService {
 	    
 	        return tmp.getTime();  // or ZoneId.systemDefault()
 	    } 
+	    /**
+	     * 
+	     * @param fileNameParam
+	     * @return
+	     */
+		private String getParquteFilNameWithPath(String fileNameParam) {
+			LOGGER.info("getParquteFilNameWithPath Method Called..........");
+			String fileNameParqute = null;
+			List<TransactionMapping> tranMppingLst = null;
+			TransactionCustomFieldRDTO trancustFldDTOObj = null;
+			try {
+				tranMppingLst = jsonConfigLoader.getStartUpConfig();	
+				if (tranMppingLst != null && tranMppingLst.size() > 0) {
+					for (TransactionMapping tranMap : tranMppingLst) {
+						String json = new Gson().toJson(tranMap);
+						LOGGER.debug("----------->> {}",json);
+						LOGGER.info("fileNameParam : [{}] - SourceFileName : [{}]",fileNameParam, tranMap.getSourceFileName());
+						if (tranMap != null && StringUtils.isNotBlank(tranMap.getSourceFileName())
+								&& StringUtils.isNotBlank(fileNameParam)
+									&& fileNameParam.equalsIgnoreCase(tranMap.getSourceFileName())) {
+								trancustFldDTOObj = new TransactionCustomFieldRDTO(tranMap.getDestFileType(),
+										tranMap.getDestLocation(), tranMap.getSourceFileName(), tranMap.getSource(), tranMap.getShortName());
+								fileNameParqute = toFormParquetPathUtils(trancustFldDTOObj);
+								LOGGER.info("getParquteFilNameWithPath [IF]- fileNameParqute : {}", fileNameParqute);
+							} else {
+								LOGGER.warn("getParquteFilNameWithPath [ELSE]- fileNameParqute - JSON Not Configured : {}", fileNameParqute);
+							}
+						}
+					}
+
+			} catch (Exception e) {
+				LOGGER.error("Exeption found in getParquteFilNameWithPath Method : {}", e);
+			} finally {
+				LOGGER.info("getParquteFilNameWithPath Method End..........");
+			}
+			return fileNameParqute;
+		}
+		/**
+		 * 
+		 * @param trancustFldDTOObj
+		 * @return
+		 */
+		private String toFormParquetPathUtils(TransactionCustomFieldRDTO trancustFldDTOObj) {
+			String destFileType = null;
+			String destLocation = null;
+			String sourceFileName = null;
+			String source = null;
+			String shortName = null;
+			String rtnFilePath = null;
+			try {
+				 destFileType = trancustFldDTOObj.destFileType();
+				 destLocation = trancustFldDTOObj.destLocation();
+				 sourceFileName = trancustFldDTOObj.sourceFileName();
+				 source = trancustFldDTOObj.source();
+				 shortName =  trancustFldDTOObj.shortName();
+				 if(StringUtils.isNotBlank(destLocation)) {////#shortname#.#DestfileType#
+						// --c:/#ShortName#/#Source#/#year#/#month#/#date#/
+						rtnFilePath = toRepalcePath(destLocation, shortName, source);
+
+						LOGGER.debug("rtnFilePath ----------> {}", rtnFilePath);
+						Path destinationDir = Paths.get(rtnFilePath);
+						if (!Files.exists(destinationDir)) {
+							Files.createDirectories(destinationDir);
+							LOGGER.info("Created destination folder: [{}]", destinationDir);
+						}
+						rtnFilePath += shortName + "." + destFileType;
+						LOGGER.info("rtnFilePath [IF] : {}", rtnFilePath);
+				 } else {
+					 LOGGER.info("rtnFilePath [ELSE] : {}", rtnFilePath);
+				 }
+			} catch(Exception e) {
+				LOGGER.info("Exception found in toFormParquetPathUtils Method : {}", e);
+			} finally {}
+			return rtnFilePath;
+		}
+
+		/**
+		 * 
+		 * @param destLocation
+		 * @param shortName
+		 * @param source
+		 * @return
+		 */
+		private String toRepalcePath(String destLocation, String shortName,String source) {
+			
+			Pattern p = Pattern.compile("#([^#]+)#");
+			Matcher m = p.matcher(destLocation);
+
+			Map<String, String> values = new HashMap<>();
+
+			while (m.find()) {
+			    String key = m.group(1);          // ShortName, Source, year, month, date, ...
+			    values.put(key, null);            // initialize; value filled later
+			}
+			
+			LocalDate today = LocalDate.now();
+			String yearStr  = String.valueOf(today.getYear());
+			String monthStr = String.format("%02d", today.getMonthValue());
+			String dateStr  = String.format("%02d", today.getDayOfMonth());
+
+			for (String key : values.keySet()) {
+			    switch (key) {
+			        case "ShortName":
+			            values.put(key, shortName);
+			            break;
+			        case "shortname":
+			            values.put(key, shortName.toLowerCase());
+			            break;
+			        case "Source":
+			            values.put(key, source);
+			            break;
+			        case "year":
+			            values.put(key, yearStr);
+			            break;
+			        case "month":
+			            values.put(key, monthStr);
+			            break;
+			        case "date":
+			            values.put(key, dateStr);
+			            break;
+			        default:
+			            values.put(key, "");   // or some default
+			    }
+			}
+			String result = destLocation;
+			for (Map.Entry<String, String> e : values.entrySet()) {
+			    String token = "#" + e.getKey() + "#";
+			    result = result.replace(token, e.getValue());
+			}
+
+			return result;
+		}
 }

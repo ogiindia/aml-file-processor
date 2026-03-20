@@ -5,6 +5,9 @@ import org.slf4j.LoggerFactory;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
+
 @Service
 public class RedisService {
 
@@ -24,6 +27,13 @@ public class RedisService {
     public void setValue(String key, Object value) {
         redisTemplate.opsForValue().set(key, value);
     }
+    
+	/*
+	 * public <T> T toPullObjectFrmRedis(String key, Class<T> type) { Gson gson =
+	 * new Gson(); String json = (String) redisTemplate.opsForValue().get(key);
+	 * return gson.fromJson(json, type); }
+	 */
+   
 
 	public Object toPullObjectFrmRedis(String keyName) {
 		try {

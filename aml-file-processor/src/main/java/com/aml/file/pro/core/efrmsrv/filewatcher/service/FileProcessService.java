@@ -308,16 +308,16 @@ public class FileProcessService {
 	 * @param filePathParam
 	 * @param processCsvPathParam
 	 */
-	public void createParquteFiles(Path filePathParam, String processCsvPathParam) {
+	public void createParquteFiles(Path filePathParam) {
 		LOGGER.info("FileProcessService@createParquteFiles Method Called.........");
 		String currentDateNmFldr = new SimpleDateFormat("yyyyMMdd").format(new Date());
 		String fileName = null;
 		try {
-			Path destinationDir = Paths.get(processCsvPathParam);
-			if (!Files.exists(destinationDir)) {
-				Files.createDirectories(destinationDir);
-				LOGGER.info("Created destination folder: [{}]", destinationDir);
-			}
+			/*
+			 * Path destinationDir = Paths.get(processCsvPathParam); if
+			 * (!Files.exists(destinationDir)) { Files.createDirectories(destinationDir);
+			 * LOGGER.info("Created destination folder: [{}]", destinationDir); }
+			 */
 			if (filePathParam != null && Files.exists(filePathParam) && Files.isRegularFile(filePathParam)) {
 				fileName = filePathParam.getFileName().toString();
 				LOGGER.info("Elcel XLSX file Name is : [{}]", filePathParam);

@@ -22,6 +22,7 @@ public class FileProcessProConfig {
 	private String dbtype;
 	private String parqutefilepath;
 	private String xmlroottag;
+	private String startconfigpath;
 	
 	public String getSourcepath() {
 		return sourcepath;
@@ -141,6 +142,14 @@ public class FileProcessProConfig {
 
 	public void setXmlroottag(String xmlroottag) {
 		this.xmlroottag = xmlroottag;
+	}
+
+	public String getStartconfigpath() {
+		return startconfigpath;
+	}
+
+	public void setStartconfigpath(String startconfigpath) {
+		this.startconfigpath = startconfigpath;
 	}
 	
 }
