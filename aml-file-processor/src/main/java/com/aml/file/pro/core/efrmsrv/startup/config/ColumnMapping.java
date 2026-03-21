@@ -4,6 +4,15 @@ import java.io.Serializable;
 
 import com.google.gson.annotations.SerializedName;
 
+import lombok.AllArgsConstructor;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+
+@Slf4j
+@Data
+@NoArgsConstructor
+@AllArgsConstructor
 public class ColumnMapping implements Serializable{
 
 	/**
@@ -11,81 +20,33 @@ public class ColumnMapping implements Serializable{
 	 */
 	private static final long serialVersionUID = 1L;
 
-	@SerializedName("file_field")
-    private String fileField;
+	@SerializedName("from")
+    private String from;
 
-    @SerializedName("csv")
-    private String csv;
-
-    @SerializedName("parquet")
-    private String parquet;
-
-    @SerializedName("tbl_column")
-    private String tblColumn;
-
-    @SerializedName("db")
-    private String db;
-
+	@SerializedName("to")
+    private String to;
+   
     @SerializedName("type")
     private String type;
 
-    @SerializedName("pattern")
-    private String pattern;
-
-    @SerializedName("transform")
-    private String transform;
-
-    @SerializedName("nullable")
-    private Boolean nullable;
-
-    @SerializedName("file_field")
-	public String getFileField() {
-		return fileField;
+    @SerializedName("from")
+	public String getFrom() {
+		return from;
 	}
 
-    @SerializedName("file_field")
-	public void setFileField(String fileField) {
-		this.fileField = fileField;
+    @SerializedName("from")
+	public void setFrom(String from) {
+		this.from = from;
 	}
 
-    @SerializedName("csv")
-	public String getCsv() {
-		return csv;
+    @SerializedName("to")
+	public String getTo() {
+		return to;
 	}
 
-    @SerializedName("csv")
-	public void setCsv(String csv) {
-		this.csv = csv;
-	}
-
-    @SerializedName("parquet")
-	public String getParquet() {
-		return parquet;
-	}
-
-    @SerializedName("parquet")
-	public void setParquet(String parquet) {
-		this.parquet = parquet;
-	}
-
-    @SerializedName("tblColumn")
-	public String getTblColumn() {
-		return tblColumn;
-	}
-
-    @SerializedName("tblColumn")
-	public void setTblColumn(String tblColumn) {
-		this.tblColumn = tblColumn;
-	}
-
-    @SerializedName("db")
-	public String getDb() {
-		return db;
-	}
-
-    @SerializedName("db")
-	public void setDb(String db) {
-		this.db = db;
+    @SerializedName("to")
+	public void setTo(String to) {
+		this.to = to;
 	}
 
     @SerializedName("type")
@@ -97,35 +58,4 @@ public class ColumnMapping implements Serializable{
 	public void setType(String type) {
 		this.type = type;
 	}
-
-    @SerializedName("pattern")
-	public String getPattern() {
-		return pattern;
-	}
-
-    @SerializedName("pattern")
-	public void setPattern(String pattern) {
-		this.pattern = pattern;
-	}
-
-    @SerializedName("transform")
-	public String getTransform() {
-		return transform;
-	}
-
-    @SerializedName("transform")
-	public void setTransform(String transform) {
-		this.transform = transform;
-	}
-
-    @SerializedName("nullable")
-	public Boolean getNullable() {
-		return nullable;
-	}
-
-    @SerializedName("nullable")
-	public void setNullable(Boolean nullable) {
-		this.nullable = nullable;
-	}
-
 }
