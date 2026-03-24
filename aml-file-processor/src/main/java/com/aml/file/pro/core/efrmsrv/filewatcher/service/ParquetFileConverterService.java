@@ -3,6 +3,7 @@ package com.aml.file.pro.core.efrmsrv.filewatcher.service;
 import java.io.FileReader;
 import java.io.IOException;
 import java.math.BigDecimal;
+import java.net.URI;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -16,6 +17,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Date;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.regex.Matcher;
@@ -23,12 +25,18 @@ import java.util.regex.Pattern;
 
 import org.apache.commons.lang3.StringUtils;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.FileSystem;
 import org.apache.parquet.example.data.Group;
+import org.apache.parquet.example.data.simple.SimpleGroup;
 import org.apache.parquet.example.data.simple.SimpleGroupFactory;
 import org.apache.parquet.hadoop.ParquetFileWriter.Mode;
+import org.apache.parquet.hadoop.ParquetReader;
 import org.apache.parquet.hadoop.ParquetWriter;
+import org.apache.parquet.hadoop.api.ReadSupport;
 import org.apache.parquet.hadoop.example.ExampleParquetWriter;
+import org.apache.parquet.hadoop.example.GroupReadSupport;
 import org.apache.parquet.hadoop.util.HadoopOutputFile;
+import org.apache.parquet.schema.GroupType;
 import org.apache.parquet.schema.MessageType;
 import org.apache.parquet.schema.MessageTypeParser;
 import org.apache.poi.hssf.usermodel.HSSFWorkbook;
@@ -44,9 +52,11 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
+import com.aml.file.pro.core.efrmsrv.startup.config.ColumnMapping;
 import com.aml.file.pro.core.efrmsrv.startup.config.JsonConfigLoader;
 import com.aml.file.pro.core.efrmsrv.startup.config.TransactionMapping;
 import com.aml.file.pro.core.efrmsrv.utils.DateFormatUtils;
+import com.aml.file.pro.core.recordDTO.JsonConfigFiledDTO;
 import com.aml.file.pro.core.recordDTO.TransactionCustomFieldRDTO;
 import com.google.gson.Gson;
 import com.opencsv.CSVReader;
@@ -77,77 +87,121 @@ public class ParquetFileConverterService {
 		 String schemaString = null;MessageType schema = null;
 		  SimpleGroupFactory factory = null;
 		  Configuration conf = null;
+		  FileSystem fs = null;
+		  List<Group> lstGrp = null;
 		  
-		 try (CSVReader reader = new CSVReader(new FileReader(csvPath))) {
-	            // 1) Read header row (dynamic column names)
-	            String[] headers = reader.readNext();
-	            String[] firstRow = reader.readNext();// first data row
-	            if (headers == null) {
-	                throw new IllegalArgumentException("Empty CSV file, no header row found");
-	            }
+			Path pth = Path.of(csvPath);
+			LOGGER.info("Source File Name : {}", pth.getFileName().toString());
 
-	            int colCount = headers.length;
-	            String[] columnTypes = new String[colCount];
-	            for (int i = 0; i < colCount; i++) {
-	                String value = (firstRow != null && i < firstRow.length) ? firstRow[i] : null;
-	                String colName = headers[i].trim().replaceAll("\\s+", "_");
-	                columnTypes[i] = inferTypeFromValue(value,colName);  // STRING / INT / LONG / DOUBLE / BOOLEAN
-	            }
-	            
-	            // 2) Build dynamic Parquet schema from headers - Here we make every column: optional binary <name> (UTF8)	          
-	            schemaString = buildSchemaString(headers, columnTypes);
-	            //LOGGER.info("Parquet schema: {}",schemaString);
-	            schema = MessageTypeParser.parseMessageType(schemaString);
-	            factory = new SimpleGroupFactory(schema);
+			JsonConfigFiledDTO jsonCOnfoBj = getParquteFilNameWithPath(pth.getFileName().toString());
+		  if(jsonCOnfoBj!=null && StringUtils.isNotBlank(jsonCOnfoBj.fileNameParqute())) {
+			  try (CSVReader reader = new CSVReader(new FileReader(csvPath))) {
+		            // 1) Read header row (dynamic column names)
+		            String[] headers = reader.readNext();
+		            String[] firstRow = reader.readNext();// first data row
+		            if (headers == null) {
+		                throw new IllegalArgumentException("Empty CSV file, no header row found");
+		            }
 
-	            // After you have built the schema:
-	            LOGGER.debug("---- EFFECTIVE PARQUET SCHEMA ----");
-	            LOGGER.debug(schema.toString());      // if you have org.apache.parquet.schema.MessageType or, if you use a string:
-	            LOGGER.debug(schemaString);
-	            LOGGER.debug("---- END SCHEMA ----");
-	            
-	            Path pth = Path.of(csvPath);
-	            LOGGER.info("Source File Name : {}",pth.getFileName().toString());
-	            String parquteName = getParquteFilNameWithPath(pth.getFileName().toString());
-	            LOGGER.info("parquteName File Name and Path : {}",parquteName);
-	            //java.nio.file.Path localPath = Paths.get(parquetPath+"/output_"+new Date().getTime()+".parquet");
-	            java.nio.file.Path localPath = Paths.get(parquteName);
-            	org.apache.hadoop.fs.Path hadoopPath = new org.apache.hadoop.fs.Path(localPath.toUri());
-            	conf = new Configuration();
-            	conf.setBoolean("dfs.client.write.checksum", false);
-            	conf.setBoolean("dfs.client.read.shortcircuit.skip.checksum", true);
-            	conf.set("fs.file.impl", org.apache.hadoop.fs.RawLocalFileSystem.class.getName());
-	            // 3) Create Parquet writer
-				try (ParquetWriter<Group> writer = ExampleParquetWriter
-						.builder(HadoopOutputFile.fromPath(hadoopPath, conf))
-						.withConf(conf)
-						.withWriteMode(Mode.OVERWRITE)
-						.withType(schema).build()) {
+		            int colCount = headers.length;
+		            String[] columnTypes = new String[colCount];
+		            for (int i = 0; i < colCount; i++) {
+		                String value = (firstRow != null && i < firstRow.length) ? firstRow[i] : null;
+		                String colName = headers[i].trim().replaceAll("\\s+", "_");
+		                columnTypes[i] = inferTypeFromValue(value,colName);  // STRING / INT / LONG / DOUBLE / BOOLEAN
+		            }
+		            
+		            // 2) Build dynamic Parquet schema from headers - Here we make every column: optional binary <name> (UTF8)	          
+		            schemaString = buildSchemaString(headers, columnTypes);
+		            //LOGGER.info("Parquet schema: {}",schemaString);
+		            schema = MessageTypeParser.parseMessageType(schemaString);
+		            factory = new SimpleGroupFactory(schema);
+
+		            // After you have built the schema:
+		            LOGGER.debug("---- EFFECTIVE PARQUET SCHEMA ----");
+		            LOGGER.debug(schema.toString());      // if you have org.apache.parquet.schema.MessageType or, if you use a string:
+		            LOGGER.debug(schemaString);
+		            LOGGER.debug("---- END SCHEMA ----");
+		             
+		            String parquteName = jsonCOnfoBj.fileNameParqute();
+		            LOGGER.info("parquteName File Name and Path : {}",parquteName);
+		            //java.nio.file.Path localPath = Paths.get(parquetPath+"/output_"+new Date().getTime()+".parquet");
+		            java.nio.file.Path localPath = Paths.get(parquteName);
+	            	org.apache.hadoop.fs.Path hadoopPath = new org.apache.hadoop.fs.Path(localPath.toUri());
 	            	
-					 // write firstRow if present
-	                if (firstRow != null) {
-	                    Group g = factory.newGroup();
-	                    writeRow(g, headers, columnTypes, firstRow);
-	                    writer.write(g);
-	                }
+	            	
+	            	
+	            	conf = new Configuration();
+	            	conf.setBoolean("dfs.client.write.checksum", false);
+	            	conf.setBoolean("dfs.client.read.shortcircuit.skip.checksum", true);
+	            	conf.set("fs.file.impl", org.apache.hadoop.fs.RawLocalFileSystem.class.getName());
+					fs = FileSystem.get(URI.create(hadoopPath.toString()), conf);
+					if (fs != null && fs.exists(hadoopPath)) {
+						LOGGER.debug("File System [IF]: {}", fs);
+						
+						lstGrp = new ArrayList<>();
+						if (firstRow != null) {
+							Group grp = factory.newGroup();
+							writeRow(grp, headers, columnTypes, firstRow);
+							lstGrp.add(grp);
+						}
+						// then remaining rows
+						String[] row; int i=1;
+						while ((row = reader.readNext()) != null) {
+							Group grp = factory.newGroup();
+							writeRow(grp, headers, columnTypes, row);
+							lstGrp.add(grp);
+							
+							if(i==1000) {
+								upsertParquet(hadoopPath, jsonCOnfoBj.keyField(), lstGrp, schema, conf);
+								lstGrp = null; lstGrp = new ArrayList<>();
+							}
+							i++;
+						}
+						//upsertParquet(hadoopPath, "KEYFIELD", lstGrp, schema, conf);
+					} else {
+						LOGGER.debug("File System [ELSE]: {}", fs);
+						// 3) Create Parquet writer
+						try (ParquetWriter<Group> writer = ExampleParquetWriter
+								.builder(HadoopOutputFile.fromPath(hadoopPath, conf))
+								.withConf(conf)
+								.withWriteMode(Mode.OVERWRITE)
+								.withType(schema).build()) {
+			            	
+							 // write firstRow if present
+			                if (firstRow != null) {
+			                    Group g = factory.newGroup();
+			                    writeRow(g, headers, columnTypes, firstRow);
+			                    writer.write(g);
+			                }
+							
+			            	// then remaining rows
+			            	String[] row;
+			            	while ((row = reader.readNext()) != null) {
+			            	    Group grp = factory.newGroup();
+			            	    writeRow(grp, headers, columnTypes, row);
+			            	    writer.write(grp);
+			            	}
+			            	writer.close(); 
+			            }
+					}
+	            	LOGGER.info("lstGrp : {}", lstGrp);
+					if(lstGrp!=null &&lstGrp.size()>0) {
+						LOGGER.info("lstGrp Inside SIze : {}", lstGrp.size());
+						upsertParquet(hadoopPath, jsonCOnfoBj.keyField(), lstGrp, schema, conf);
+					}
 					
-	            	// then remaining rows
-	            	String[] row;
-	            	while ((row = reader.readNext()) != null) {
-	            	    Group grp = factory.newGroup();
-	            	    writeRow(grp, headers, columnTypes, row);
-	            	    writer.write(grp);
-	            	}
-	            	writer.close(); 
-	            }
-
-	            LOGGER.info("Wrote parquet file: {}", parquetPath);
-	            LOGGER.info("Columns: {}", Arrays.toString(headers));
-	        } catch(Exception e) {
-	        	LOGGER.error("Exception found in ParquetFileConverterService@convertCsvToParquet : {}",e);
-	        } finally {
-	        	schemaString = null; schema = null; factory = null; conf = null;
-	        }
+		            LOGGER.info("Wrote parquet file: {}", parquetPath);
+		            LOGGER.info("Columns: {}", Arrays.toString(headers));
+		        } catch(Exception e) {
+		        	LOGGER.error("Exception found in ParquetFileConverterService@convertCsvToParquet : {}",e);
+		        } finally {
+		        	schemaString = null; schema = null; factory = null; conf = null;
+		        }
+		  } else {
+			  
+		  }
+		
 	 }
 	 
 	 public void convertXlsXlsxToParqute(Path xlsxPathParam, String parquetPath) {
@@ -157,6 +211,8 @@ public class ParquetFileConverterService {
 		 String schemaString = null;MessageType schema = null;
 		  SimpleGroupFactory factory = null;
 		  Configuration conf = null;
+		  FileSystem fs = null;
+		  List<Group> lstGrp = null;
 		  String praquteFileName = null;
 		 try {
 				destinationDir = Paths.get(parquetPath);
@@ -170,139 +226,358 @@ public class ParquetFileConverterService {
 					praquteFileName = xlsxFileName.substring(0, xlsxFileName.lastIndexOf("."));
 				}
 			 
-				if (xlsxPathParam.toString().endsWith(".xlsx")) {
-					LOGGER.info("[XLSX] File is detected......");
-					workbook = new XSSFWorkbook(Files.newInputStream(xlsxPathParam));
-				} else if (xlsxPathParam.toString().endsWith(".xls")) {
-					LOGGER.info("[XLS] File is detected......");
-					workbook = new HSSFWorkbook(Files.newInputStream(xlsxPathParam));
+				LOGGER.info("Source File Name ---> : {}", xlsxPathParam.getFileName().toString());
+				JsonConfigFiledDTO jsonCOnfoBj = getParquteFilNameWithPath(xlsxPathParam.getFileName().toString());
+				
+				if(jsonCOnfoBj!=null && StringUtils.isNotBlank(jsonCOnfoBj.fileNameParqute())) {
+					if (xlsxPathParam.toString().endsWith(".xlsx")) {
+						LOGGER.info("[XLSX] File is detected......");
+						workbook = new XSSFWorkbook(Files.newInputStream(xlsxPathParam));
+					} else if (xlsxPathParam.toString().endsWith(".xls")) {
+						LOGGER.info("[XLS] File is detected......");
+						workbook = new HSSFWorkbook(Files.newInputStream(xlsxPathParam));
+					} else {
+						// throw new IllegalArgumentException("Unsupported file type");
+					}
+					if (workbook != null) {
+						// Read header row
+						sheet = workbook.getSheetAt(0);
+						headerRow = sheet.getRow(0);
+											
+						List<String> headerList = new ArrayList<>();
+						for (Cell cell : headerRow) {
+							headerList.add(cell.getStringCellValue().trim());
+						}
+						int colCount = headerList.size();
+						String[] columnTypes = new String[colCount];
+						Row row = sheet.getRow(0);
+						 
+						//String[] firstRow = new String[colCount];
+						//First Row 
+						for (int i = 0; i < colCount; i++) {
+							//firstRow[i]=row.getCell(i).toString();
+							String value = (row != null) ? row.getCell(i, Row.MissingCellPolicy.RETURN_BLANK_AS_NULL).toString() : null;
+							String colName = headerList.get(i).trim().replaceAll("\\s+", "_");
+							columnTypes[i] = inferTypeFromValue(value, colName); // STRING / INT / LONG / DOUBLE / BOOLEAN
+							
+						}
+						String[] headerArray = headerList.toArray(new String[0]);
+						// 2) Build dynamic Parquet schema from headers - Here we make every column: optional binary <name> (UTF8)
+						schemaString = buildSchemaString(headerArray, columnTypes);
+						//LOGGER.info("Parquet schema: {}", schemaString);
+						schema = MessageTypeParser.parseMessageType(schemaString);
+						factory = new SimpleGroupFactory(schema);
+						 // After you have built the schema:
+			            LOGGER.debug("---- EFFECTIVE PARQUET SCHEMA ----");
+			            LOGGER.debug(schema.toString());      // if you have org.apache.parquet.schema.MessageType or, if you use a string:
+			            LOGGER.debug(schemaString);
+			            LOGGER.debug("---- END SCHEMA ----");
+			            //FILENAME/CBS/year/month/date/file
+			           
+			         
+						String parquteName = jsonCOnfoBj.fileNameParqute();
+						LOGGER.info("parquteName File Name and Path ---> : {}",parquteName);
+			            //java.nio.file.Path localPath = Paths.get(parquetPath+"/output_"+new Date().getTime()+".parquet");
+			            java.nio.file.Path localPath = Paths.get(parquteName);
+			            
+			            //java.nio.file.Path localPath = Paths.get(parquetPath+"/"+praquteFileName+"_"+new Date().getTime()+".parquet");
+			            LOGGER.info("Parqute File Name : [{}]",localPath);
+			            org.apache.hadoop.fs.Path hadoopPath = new org.apache.hadoop.fs.Path(localPath.toUri());
+		            	conf = new Configuration(); 
+		            	conf.setBoolean("dfs.client.write.checksum", false);
+		            	conf.setBoolean("dfs.client.read.shortcircuit.skip.checksum", true);
+		            	conf.set("fs.file.impl", org.apache.hadoop.fs.RawLocalFileSystem.class.getName());
+		            	fs = FileSystem.get(URI.create(hadoopPath.toString()), conf);
+						if (fs != null && fs.exists(hadoopPath)) {
+							LOGGER.debug("File System [IF]: {}", fs);
+							lstGrp = new ArrayList<>();
+							
+							/*if (firstRow != null) {
+								Group grp = factory.newGroup();
+								writeRow(grp, headerArray, columnTypes, firstRow);
+								lstGrp.add(grp);
+							} */
+							LOGGER.info("Total Sheet Last Row Number : [{}]", sheet.getLastRowNum());
+							for (int i = 1; i <= sheet.getLastRowNum(); i++) {
+								Row rowRemain = sheet.getRow(i);
+								if (isRowCompletelyEmpty(rowRemain)) {
+								    continue; // skip this row
+								}
+								String[] rowRm = new String[rowRemain.getLastCellNum()];
+								for (int cell = 0; cell < rowRemain.getLastCellNum(); cell++) {
+									Cell rowCell = rowRemain.getCell(cell);
+
+									CellType celTyp = null;
+									if (rowCell != null) {
+										celTyp = rowCell.getCellType();
+									}
+									String value = "";
+									if (rowCell != null && celTyp != null) {
+										switch (celTyp) {
+										case STRING:
+											value = rowCell.getStringCellValue();
+											break;
+										case NUMERIC:
+											value = String.valueOf(rowCell.getNumericCellValue());
+											if (DateUtil.isCellDateFormatted(rowCell)) {
+												// Convert to LocalDate or keep as Date
+												Date date = rowCell.getDateCellValue();
+												// Example: format as yyyy-MM-dd
+												value = new SimpleDateFormat("yyyy-MM-dd").format(date);
+											} else {
+												value = String.valueOf(rowCell.getNumericCellValue());
+											}
+											break;
+										case BOOLEAN:
+											value = String.valueOf(rowCell.getBooleanCellValue());
+											break;
+										case FORMULA:
+											value = rowCell.getCellFormula();
+											break;
+										case BLANK:
+											value = "";
+											break;
+										default:
+											value = "";
+										}
+									}
+									rowRm[cell] = value;
+								}
+								if (rowRm != null) {
+									Group grp1 = factory.newGroup();
+									writeRow(grp1, headerArray, columnTypes, rowRm);
+									lstGrp.add(grp1);
+								}
+								if(i==1000) {
+									upsertParquet(hadoopPath, jsonCOnfoBj.keyField(), lstGrp, schema, conf);
+									lstGrp = null;
+									lstGrp = new ArrayList<>();
+								}
+							}
+							//upsertParquet(hadoopPath, "KEYFIELD", lstGrp, schema, conf);
+						}  else {
+							// 3) Create Parquet writer
+							try (ParquetWriter<Group> writer = ExampleParquetWriter
+									.builder(HadoopOutputFile.fromPath(hadoopPath, conf))
+									.withConf(conf)
+									.withWriteMode(Mode.OVERWRITE)
+									.withType(schema).build()) {
+				            	
+								// write firstRow if present
+								/*if (firstRow != null) {
+									Group g = factory.newGroup();
+									writeRow(g, headerArray, columnTypes, firstRow);
+									writer.write(g);
+								}*/
+				                
+								for (int i = 1; i <= sheet.getLastRowNum(); i++) {
+									Row rowRemain = sheet.getRow(i);
+									String[] rowRm = new String[rowRemain.getLastCellNum()];
+									if (isRowCompletelyEmpty(rowRemain)) {
+									    continue; // skip this row
+									}
+									for (int cell = 0; cell < rowRemain.getLastCellNum(); cell++) {
+										Cell rowCell = rowRemain.getCell(cell);
+									
+										CellType celTyp = null;
+										if(rowCell!=null) {
+											celTyp = rowCell.getCellType();
+										}
+										String value="";
+										if (rowCell != null && celTyp!=null) {
+										switch (celTyp) {
+										    case STRING:
+										        value = rowCell.getStringCellValue();
+										        break;
+										    case NUMERIC:
+										        value = String.valueOf(rowCell.getNumericCellValue());
+										        if (DateUtil.isCellDateFormatted(rowCell)) {
+										            // Convert to LocalDate or keep as Date
+										            Date date = rowCell.getDateCellValue();
+										            // Example: format as yyyy-MM-dd
+										            value = new SimpleDateFormat("yyyy-MM-dd").format(date);
+										        } else {
+										            value = String.valueOf(rowCell.getNumericCellValue());
+										        }
+										        break;
+										    case BOOLEAN:
+										        value = String.valueOf(rowCell.getBooleanCellValue());
+										        break;
+											case FORMULA:
+												value = rowCell.getCellFormula();
+												break;
+											case BLANK:
+												value =  "";
+												break;
+											default:
+										        value = "";
+										}
+										}
+										rowRm[cell]=value;
+									}
+
+									if (rowRm != null) {
+										Group grp = factory.newGroup();
+										writeRow(grp, headerArray, columnTypes, rowRm);
+										writer.write(grp);
+									}
+				                }
+				            	writer.close(); 
+				            }
+						}
+		            	
+						LOGGER.info("lstGrp : {}", lstGrp);
+						if (lstGrp != null && lstGrp.size() > 0) {
+							LOGGER.info("lstGrp Inside SIze : {}", lstGrp.size());
+							upsertParquet(hadoopPath, jsonCOnfoBj.keyField(), lstGrp, schema, conf);
+						}
+						LOGGER.info("Wrote parquet file: {}", parquetPath);
+						LOGGER.warn("Columns: {}", Arrays.toString(headerArray));
+					}
 				} else {
-					// throw new IllegalArgumentException("Unsupported file type");
+					
 				}
 				
-				if (workbook != null) {
-					// Read header row
-					sheet = workbook.getSheetAt(0);
-					headerRow = sheet.getRow(0);
-										
-					List<String> headerList = new ArrayList<>();
-					for (Cell cell : headerRow) {
-						headerList.add(cell.getStringCellValue().trim());
-					}
-					int colCount = headerList.size();
-					String[] columnTypes = new String[colCount];
-					Row row = sheet.getRow(0);
-					 
-					String[] firstRow = new String[colCount];
-					//First Row 
-					for (int i = 0; i < colCount; i++) {
-						firstRow[i]=row.getCell(i).toString();
-						String value = (row != null) ? row.getCell(i, Row.MissingCellPolicy.RETURN_BLANK_AS_NULL).toString() : null;
-						String colName = headerList.get(i).trim().replaceAll("\\s+", "_");
-						columnTypes[i] = inferTypeFromValue(value, colName); // STRING / INT / LONG / DOUBLE / BOOLEAN
-						
-					}
-					String[] headerArray = headerList.toArray(new String[0]);
-					// 2) Build dynamic Parquet schema from headers - Here we make every column: optional binary <name> (UTF8)
-					schemaString = buildSchemaString(headerArray, columnTypes);
-					//LOGGER.info("Parquet schema: {}", schemaString);
-					schema = MessageTypeParser.parseMessageType(schemaString);
-					factory = new SimpleGroupFactory(schema);
-					 // After you have built the schema:
-		            LOGGER.debug("---- EFFECTIVE PARQUET SCHEMA ----");
-		            LOGGER.debug(schema.toString());      // if you have org.apache.parquet.schema.MessageType or, if you use a string:
-		            LOGGER.debug(schemaString);
-		            LOGGER.debug("---- END SCHEMA ----");
-		            //FILENAME/CBS/year/month/date/file
-		           
-		            LOGGER.info("Source File Name ---> : {}",xlsxPathParam.getFileName().toString());
-		            String parquteName = getParquteFilNameWithPath(xlsxPathParam.getFileName().toString());
-		            LOGGER.info("parquteName File Name and Path ---> : {}",parquteName);
-		            //java.nio.file.Path localPath = Paths.get(parquetPath+"/output_"+new Date().getTime()+".parquet");
-		            java.nio.file.Path localPath = Paths.get(parquteName);
-		            
-		            //java.nio.file.Path localPath = Paths.get(parquetPath+"/"+praquteFileName+"_"+new Date().getTime()+".parquet");
-		            LOGGER.info("Parqute File Name : [{}]",localPath);
-		            org.apache.hadoop.fs.Path hadoopPath = new org.apache.hadoop.fs.Path(localPath.toUri());
-	            	conf = new Configuration(); 
-	            	conf.setBoolean("dfs.client.write.checksum", false);
-	            	conf.setBoolean("dfs.client.read.shortcircuit.skip.checksum", true);
-	            	conf.set("fs.file.impl", org.apache.hadoop.fs.RawLocalFileSystem.class.getName());
-	            	 // 3) Create Parquet writer
-					try (ParquetWriter<Group> writer = ExampleParquetWriter
-							.builder(HadoopOutputFile.fromPath(hadoopPath, conf))
-							.withConf(conf)
-							.withWriteMode(Mode.OVERWRITE)
-							.withType(schema).build()) {
-		            	
-						// write firstRow if present
-						if (firstRow != null) {
-							Group g = factory.newGroup();
-							writeRow(g, headerArray, columnTypes, firstRow);
-							writer.write(g);
-						}
-		                
-						for (int i = 1; i <= sheet.getLastRowNum(); i++) {
-							Row rowRemain = sheet.getRow(i);
-							String[] rowRm = new String[rowRemain.getLastCellNum()];
-							for (int cell = 0; cell < rowRemain.getLastCellNum(); cell++) {
-								Cell rowCell = rowRemain.getCell(cell);
-							
-								CellType celTyp = null;
-								if(rowCell!=null) {
-									celTyp = rowCell.getCellType();
-								}
-								String value="";
-								if (rowCell != null && celTyp!=null) {
-								switch (celTyp) {
-								    case STRING:
-								        value = rowCell.getStringCellValue();
-								        break;
-								    case NUMERIC:
-								        value = String.valueOf(rowCell.getNumericCellValue());
-								        if (DateUtil.isCellDateFormatted(rowCell)) {
-								            // Convert to LocalDate or keep as Date
-								            Date date = rowCell.getDateCellValue();
-								            // Example: format as yyyy-MM-dd
-								            value = new SimpleDateFormat("yyyy-MM-dd").format(date);
-								        } else {
-								            value = String.valueOf(rowCell.getNumericCellValue());
-								        }
-								        break;
-								    case BOOLEAN:
-								        value = String.valueOf(rowCell.getBooleanCellValue());
-								        break;
-									case FORMULA:
-										value = rowCell.getCellFormula();
-										break;
-									case BLANK:
-										value =  "";
-										break;
-									default:
-								        value = "";
-								}
-								}
-								rowRm[cell]=value;
-							}
-
-							if (rowRm != null) {
-								Group grp = factory.newGroup();
-								writeRow(grp, headerArray, columnTypes, rowRm);
-								writer.write(grp);
-							}
-		                }
-		            	writer.close(); 
-		            }
-
-					LOGGER.info("Wrote parquet file: {}", parquetPath);
-					LOGGER.warn("Columns: {}", Arrays.toString(headerArray));
-				}
 			} catch (Exception e) {
 				LOGGER.error("Exception found in ParquetFileConverterService@convertCsvToParquet : {}", e);
 			} finally {
 				schemaString = null; schema = null; factory = null; conf = null;
 			}
 	 }
+	 
+	 
+	 private static boolean isRowCompletelyEmpty(Row row) {
+		    if (row == null) {
+		        return true;
+		    }
+		    if (row.getLastCellNum() <= 0) {
+		        return true;
+		    }
+
+		    short firstCell = row.getFirstCellNum();
+		    short lastCell  = row.getLastCellNum();
+
+		    for (int c = firstCell; c < lastCell; c++) {
+		        Cell cell = row.getCell(c);
+		        if (cell != null && cell.getCellType() != CellType.BLANK
+		                && cell.toString().trim().length() > 0) {
+		            return false; // found non-empty cell
+		        }
+		    }
+		    return true;
+		}
+	 
+		/**
+		 * 
+		 * @param parquetPath
+		 * @param keyfield
+		 * @param incomingRows
+		 * @param schema
+		 * @param conf
+		 * @throws IOException
+		 */
+		public static void upsertParquet(org.apache.hadoop.fs.Path parquetPath, String keyfield,
+				List<Group> incomingRows, MessageType schema, Configuration conf) throws IOException {
+			LOGGER.info(":::::::::::Parqute Uodate Called:::::::::::::::::");
+			FileSystem fs = FileSystem.get(URI.create(parquetPath.toString()), conf);
+
+			// 1) Load existing rows (if file exists) into a map keyed by "id"
+			Map<String, Group> merged = new LinkedHashMap<>();
+
+			if (fs.exists(parquetPath)) {
+				ReadSupport<Group> readSupport = new GroupReadSupport();
+				try (ParquetReader<Group> reader = ParquetReader.builder(readSupport, parquetPath) // parquetPath is
+																									// org.apache.hadoop.fs.Path
+						.withConf(conf).build()) {
+					Group group;
+					while ((group = reader.read()) != null) {
+
+					    SimpleGroup g = (SimpleGroup) group;  // if your reader returns SimpleGroup
+					    GroupType type = g.getType();
+
+					    // Return null if the field does not exist in schema
+					    if (!type.containsField(keyfield)) {
+					        // optionally log and continue
+					        continue;
+					    }
+
+					    int fieldIndex = type.getFieldIndex(keyfield);
+
+					    // Skip if there is no value for this field in this row
+					    if (g.getFieldRepetitionCount(fieldIndex) == 0) {
+					        continue;
+					    }
+
+					    String idKeyFieldValue = g.getString(keyfield, 0);
+					    merged.put(idKeyFieldValue, g);
+					}
+				}
+			}
+
+			// 2) Apply upserts: overwrite existing id = update, new id = insert
+			for (Group row : incomingRows) {
+				 SimpleGroup g = (SimpleGroup) row;
+				    GroupType type = g.getType();
+
+				    if (!type.containsField(keyfield)) {
+				        // log and skip, or handle as needed
+				        continue;
+				    }
+
+				    int fieldIndex = type.getFieldIndex(keyfield);
+				    if (g.getFieldRepetitionCount(fieldIndex) == 0) {
+				        // no value for this field in this row
+				        continue;
+				    }
+
+				    String keyfieldkey = g.getString(keyfield, 0);
+				    merged.put(keyfieldkey, row);
+			}
+
+			// 3) Rewrite parquet file with merged data
+			if (fs.exists(parquetPath)) {
+				fs.delete(parquetPath, false);
+			}
+
+			try (ParquetWriter<Group> writer = ExampleParquetWriter
+					.builder(HadoopOutputFile.fromPath(parquetPath, conf)).withType(schema).withConf(conf).build()) {
+
+				for (Group row : merged.values()) {
+					writer.write(row);
+				}
+				writer.close();
+			}
+			LOGGER.info(":::::::::::Parqute Uodate End:::::::::::::::::\n\n");
+		}
+	 
+		/**
+		 * NOt Use
+		 * @param parquetPath
+		 * @param updatedRows
+		 * @param schema
+		 * @param conf
+		 * @throws IOException
+		 */
+		public void rewriteAccountsParquet(org.apache.hadoop.fs.Path parquetPath, List<Group> updatedRows,
+				MessageType schema, Configuration conf) throws IOException {
+
+			// 1) Delete existing parquet file if present
+			FileSystem fs = parquetPath.getFileSystem(conf);
+			if (fs.exists(parquetPath)) {
+				fs.delete(parquetPath, false); // or true if directory
+			}
+
+			// 2) Create new parquet file and write updated rows
+			try (ParquetWriter<Group> writer = ExampleParquetWriter
+					.builder(HadoopOutputFile.fromPath(parquetPath, conf)).withType(schema).withConf(conf).build()) {
+
+				for (Group row : updatedRows) {
+					writer.write(row);
+				}
+			}
+		}
+
+	 
 	 	/**
 	 	 * 
 	 	 * @param value
@@ -457,44 +732,53 @@ public class ParquetFileConverterService {
 	     * @param fileNameParam
 	     * @return
 	     */
-		private String getParquteFilNameWithPath(String fileNameParam) {
+		private JsonConfigFiledDTO getParquteFilNameWithPath(String fileNameParam) {
 			LOGGER.info("getParquteFilNameWithPath Method Called..........");
 			String fileNameParqute = null;
 			List<TransactionMapping> tranMppingLst = null;
 			TransactionCustomFieldRDTO trancustFldDTOObj = null;
+			JsonConfigFiledDTO jsonCOnfigFldDtoObj = null;
+			String keyCOlumn = null;
 			try {
 				tranMppingLst = jsonConfigLoader.getStartUpConfig();	
 				if (tranMppingLst != null && tranMppingLst.size() > 0) {
 					for (TransactionMapping tranMap : tranMppingLst) {
 						String json = new Gson().toJson(tranMap);
 						LOGGER.debug("----------->> {}",json);
-						LOGGER.info("fileNameParam : [{}] - SourceFileName : [{}]",fileNameParam, tranMap.getSourceFileName());
 						if (tranMap != null && StringUtils.isNotBlank(tranMap.getSourceFileName())
 								&& StringUtils.isNotBlank(fileNameParam)
 									&& fileNameParam.equalsIgnoreCase(tranMap.getSourceFileName())) {
+								LOGGER.info("fileNameParam : [{}] - SourceFileName : [{}]",fileNameParam, tranMap.getSourceFileName());
 								trancustFldDTOObj = new TransactionCustomFieldRDTO(tranMap.getDestFileType(),
-										tranMap.getDestLocation(), tranMap.getSourceFileName(), tranMap.getSource(), tranMap.getShortName());
+										tranMap.getDestLocation(), tranMap.getSourceFileName(), tranMap.getSource(), tranMap.getShortName(), tranMap.getColumns());
 								fileNameParqute = toFormParquetPathUtils(trancustFldDTOObj);
+								List<String> keyclmLst = tranMap.getKeyColumns();
+								if(keyclmLst!=null && keyclmLst.size()>0) {
+									keyCOlumn = keyclmLst.get(0);
+									LOGGER.info("KeyCOlumn Name : {}", keyCOlumn);
+								}
 								LOGGER.info("getParquteFilNameWithPath [IF]- fileNameParqute : {}", fileNameParqute);
+								break;
 							} else {
-								LOGGER.warn("getParquteFilNameWithPath [ELSE]- fileNameParqute - JSON Not Configured : {}", fileNameParqute);
+								// LOGGER.warn("getParquteFilNameWithPath [ELSE]- fileNameParqute - JSON Not
+								// Configured : {}", fileNameParqute);
 							}
 						}
-					}
-
+				}
 			} catch (Exception e) {
 				LOGGER.error("Exeption found in getParquteFilNameWithPath Method : {}", e);
 			} finally {
 				LOGGER.info("getParquteFilNameWithPath Method End..........");
 			}
-			return fileNameParqute;
+			jsonCOnfigFldDtoObj = new JsonConfigFiledDTO(fileNameParqute, keyCOlumn);
+			return jsonCOnfigFldDtoObj;
 		}
 		/**
 		 * 
 		 * @param trancustFldDTOObj
 		 * @return
 		 */
-		private String toFormParquetPathUtils(TransactionCustomFieldRDTO trancustFldDTOObj) {
+		public String toFormParquetPathUtils(TransactionCustomFieldRDTO trancustFldDTOObj) {
 			String destFileType = null;
 			String destLocation = null;
 			String sourceFileName = null;

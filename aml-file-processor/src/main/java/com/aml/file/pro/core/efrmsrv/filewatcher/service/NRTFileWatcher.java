@@ -11,6 +11,9 @@ import java.nio.file.WatchService;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.List;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
@@ -19,6 +22,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import com.aml.file.pro.core.efrmsrv.config.PublishData2Kafka;
+import com.aml.file.pro.core.efrmsrv.config.RedisService;
 import com.aml.file.pro.core.efrmsrv.utils.AMLConstants;
 import com.aml.file.pro.core.efrmsrv.utils.CommonUtils;
 import com.aml.file.pro.core.efrmsrv.utils.FileProcessProConfig;
@@ -52,20 +56,23 @@ public class NRTFileWatcher {
 	@Autowired
 	FileMapper fileMapper;
 	
+	@Autowired
+	RedisService redisService;
+	
 	Long startDateMain = new Date().getTime();
 	
 	
-
 	@PostConstruct
 	void nrtTransFileWatcher() {
 		System.setProperty("parquet.columnwriter.version", "v1");   // force old writer
 	    System.setProperty("parquet.statistics.enabled", "false");  // disable stats entirely
 	    System.setProperty("parquet.bloom.filter.enabled", "false"); // extra safety
-
+	    Integer counter = 0;
+		Integer counter22 = 0;
 	    // start Spring / your app...
 		LOGGER.info("-------------------START");
 		try {
-			Thread thread = new Thread(() -> {
+			//Thread thread = new Thread(() -> {
 				boolean completedFileCountSts=false;
 				try {
 					WatchService watchService = FileSystems.getDefault().newWatchService();
@@ -78,6 +85,9 @@ public class NRTFileWatcher {
 						WatchKey key = watchService.take();
 						List<WatchEvent<?>> watcheventss = key.pollEvents();
 						Integer fileCount = watcheventss.size();
+						counter = fileCount;
+						LOGGER.info("FIle COunt : [{}]",fileCount);
+						
 						for (WatchEvent<?> event : watcheventss) {
 							WatchEvent.Kind<?> kind = event.kind();
 							Path fileName = (Path) event.context();
@@ -96,10 +106,8 @@ public class NRTFileWatcher {
 											LOGGER.info("Final CSV Path and Name after Convert : {}", csvFilePath.toString());
 											Long startDate = new Date().getTime();
 											LOGGER.info("NRTFileWatcher CSV Import Start Time : [{}]", startDate);
-											
 											// process Direct Insert
 											//fileProcessService.csvfileProcessMethod(csvFilePath, fileProcessProConfig.getDestinationpath());
-											
 											Long endTime = new Date().getTime();
 											LOGGER.info("NRTFileWatcher CSV Import - Total time : {}", commonUtils.findIsHourMinSec((endTime - startDate)));
 										}
@@ -110,14 +118,9 @@ public class NRTFileWatcher {
 									Path fullPath = path.resolve(fileName);
 									// Waiting for file write completion
 									waitForFileCompletion(fullPath);
-									//String toCsvFileName = fileName.getFileName().toString();
-									//Path csvFilePath = Paths.get(fileProcessProConfig.getSourcepath(), toCsvFileName);
-									//commonUtils.toMove(fullPath, csvFilePath);
-									//LOGGER.info("###############File moved successfully#############");
-									
 									try {
 										
-											if (fullPath != null && Files.exists(fullPath)) {
+										if (fullPath != null && Files.exists(fullPath)) {
 												LOGGER.info("Final CSV Path and Name after Convert : [{}]", fullPath.toString());
 												Long startDate = new Date().getTime();
 												LOGGER.info("NRTFileWatcher CSV Import Start Time : [{}]", startDate);
@@ -126,13 +129,14 @@ public class NRTFileWatcher {
 												//fileProcessService.csvfileProcessMethod(csvFilePath, fileProcessProConfig.getDestinationpath());
 												// process using parqute file
 												fileProcessService.createParquteFiles(fullPath);
+												
 												Long endTime = new Date().getTime();
 												LOGGER.info("NRTFileWatcher CSV Import - Total time : [{}]", commonUtils.findIsHourMinSec((endTime - startDate)));
 											}
 										
 									} catch (Exception e) {
 										LOGGER.error("Exception found in watchDirectory : {}", e);
-									}
+									} finally { }
 									LOGGER.info("File format {} block End.", AMLConstants.CSV_FORMAT);
 								} else if (fileName != null && (fileName.toString().endsWith(AMLConstants.XLS_FORMAT) 
 										|| fileName.toString().endsWith(AMLConstants.XLSX_FORMAT))) {
@@ -141,60 +145,99 @@ public class NRTFileWatcher {
 									Path fullPath = path.resolve(fileName);
 									// Waiting for file write completion
 									waitForFileCompletion(fullPath);
-									//String toCsvFileName = fileName.getFileName().toString();
-									//Path csvFilePath = Paths.get(fileProcessProConfig.getDestinationpath(), toCsvFileName);
-									//commonUtils.toMove(fullPath, csvFilePath);
-									//LOGGER.info("###############File moved successfully#############");
-									
+																		
 									try {
 										if (fullPath != null && Files.exists(fullPath)) {
-												LOGGER.info("Final XLS/XLSX Path and Name after Convert : [{}]", fullPath.toString());
-												Long startDate = new Date().getTime();
-												LOGGER.info("NRTFileWatcher XLS/XLSX Import Start Time : [{}]", startDate);
+											LOGGER.info("Final XLS/XLSX Path and Name after Convert : [{}]", fullPath.toString());
+											Long startDate = new Date().getTime();
+											LOGGER.info("NRTFileWatcher XLS/XLSX Import Start Time : [{}]", startDate);
 
-												// process Direct Insert
-												//fileProcessService.xlsProcess(csvFilePath, fileProcessProConfig.getDestinationpath());
-												// process using parqute file
-												fileProcessService.createParquteFiles(fullPath);
-												Long endTime = new Date().getTime();
-												LOGGER.info("NRTFileWatcher XLS/XLSX Import - Total time : [{}]", commonUtils.findIsHourMinSec((endTime - startDate)));
+											// process Direct Insert fileProcessService.xlsProcess(csvFilePath,
+											// fileProcessProConfig.getDestinationpath()); process using parqute file
+											fileProcessService.createParquteFiles(fullPath);
+
+											Long endTime = new Date().getTime();
+											LOGGER.info("NRTFileWatcher XLS/XLSX Import - Total time : [{}]", commonUtils.findIsHourMinSec((endTime - startDate)));
 										}
 
-									} catch (Exception e) { LOGGER.error("Exception found in watchDirectory : {}", e); }
+									} catch (Exception e) { LOGGER.error("Exception found in watchDirectory : {}", e); } 
+									finally {
+										
+									}
 									LOGGER.info("File format {} block End.", AMLConstants.XLSX_FORMAT +"/" + AMLConstants.XLS_FORMAT);
 								}
-							
+								counter22++;  // also atomic
+								
+								LOGGER.info("COUNTER@@@@- [{}]",counter22);   // checkAllFilesCompleted();   
 								completedFileCountSts = packageWatcherToChkFileCntReached();
 								LOGGER.info("completedFileCountSts - [{}]",completedFileCountSts);
 								if (completedFileCountSts) {
-									FinSecIndicatorVO finSecIndicatorVOoBj = new FinSecIndicatorVO();
-									finSecIndicatorVOoBj = amlDataTblDetailsFetch
-											.toSetFinSecIndicatorObjectForDuckDBSts(finSecIndicatorVOoBj);
-									finSecIndicatorVOoBj = amlDataTblDetailsFetch
-											.toGetRowCountEachAMLTblSetINFincSecIndicator(finSecIndicatorVOoBj);
-								
-									publishData2Kafka.sendtoKafka(finSecIndicatorVOoBj.getUuid(), finSecIndicatorVOoBj, AMLConstants.KAFKA_PUB_TOPIC);
-									
+									/*
+									 * LOGGER.info("Redis Published Successfully............"); if(redisPub ||
+									 * fileCount ==0) { redisService.toIntimatePub("FILECOMPLETD"); redisPub =
+									 * false; fileCount = 0; }
+									 */
 									Long endTime = new Date().getTime();
-									LOGGER.info("Total file processed time : {}", commonUtils.findIsHourMinSec((endTime - startDateMain)));	
-								}
+									LOGGER.info("Total file processed time : {}", commonUtils.findIsHourMinSec((endTime - startDateMain)));
+									
+									}
 								// File fetch interval on each.
 								Thread.sleep(fileProcessProConfig.getFetchinterval());
 							}
 						}
 						boolean valid = key.reset(); if (!valid) { break; }
+						LOGGER.info(">>>>>>>>>>>>>>>>>counter22 : {} --- counter : {}",counter22, counter);
+						if(counter22 == counter) {
+							counter = 0;
+							counter22 = 0;
+							LOGGER.info("Redis Published Successfully............");
+							redisService.toIntimatePub("FILECOMPLETD");
+						}
 					}
+					
 				} catch (Exception e) {
 					LOGGER.info("Exception found in NRTFileWatcher@nrtTransFileWatcher [INSIDE CATCH]: {}", e);
-				} finally { }
-			});
-			thread.setDaemon(true);
-			thread.start();
+				} finally {}
+			//});
+			//thread.setDaemon(true);
+			//thread.start();
 		} catch (Exception e) {
 			LOGGER.info("Exception found in NRTFileWatcher@nrtTransFileWatcher [OUTSIDE CATCH]: {}", e);
 		} finally { }
+		
+		
 	}
 
+	private void checkAllFilesCompleted() {
+		
+			onAllFilesProcessed();
+		
+	}
+
+	private void onAllFilesProcessed() {
+		// your next-step logic here
+		// e.g. publish Redis/Kafka, start summarization, etc.
+		
+			LOGGER.info("Redis Published Successfully............");
+			redisService.toIntimatePub("FILECOMPLETD");
+			
+			if (false) {
+				FinSecIndicatorVO finSecIndicatorVOoBj = new FinSecIndicatorVO();
+				finSecIndicatorVOoBj = amlDataTblDetailsFetch
+						.toSetFinSecIndicatorObjectForDuckDBSts(finSecIndicatorVOoBj);
+				finSecIndicatorVOoBj = amlDataTblDetailsFetch
+						.toGetRowCountEachAMLTblSetINFincSecIndicator(finSecIndicatorVOoBj);
+			
+				publishData2Kafka.sendtoKafka(finSecIndicatorVOoBj.getUuid(), finSecIndicatorVOoBj, AMLConstants.KAFKA_PUB_TOPIC);
+				
+				}
+		
+	
+		
+		// otherMethod();
+	}
+
+	
 	/**
 	 * 
 	 * @param file
@@ -241,7 +284,7 @@ public class NRTFileWatcher {
 					startDateMain = new Date().getTime();
 				}
 				LOGGER.info("Config / Required Count is : [{}], File Count : [{}]", fileProcessProConfig.getFilecount(), count);
-				if (count == fileProcessProConfig.getFilecount()) {
+				if (count >= fileProcessProConfig.getFilecount()) {
 					cbsFileImportStatus = true;
 					// break;
 				}

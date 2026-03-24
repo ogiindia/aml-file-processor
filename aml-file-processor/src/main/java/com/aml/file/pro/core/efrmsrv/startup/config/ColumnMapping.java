@@ -13,7 +13,7 @@ import lombok.extern.slf4j.Slf4j;
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
-public class ColumnMapping implements Serializable{
+public class ColumnMapping implements Serializable {
 
 	/**
 	 * 
@@ -21,41 +21,81 @@ public class ColumnMapping implements Serializable{
 	private static final long serialVersionUID = 1L;
 
 	@SerializedName("from")
-    private String from;
+	private String from;
 
 	@SerializedName("to")
-    private String to;
-   
-    @SerializedName("type")
-    private String type;
+	private String to;
 
-    @SerializedName("from")
+	@SerializedName("type")
+	private String type;
+
+	@SerializedName("func")
+	private String func;
+
+	@SerializedName("search")
+	private String search;
+
+	@SerializedName("criteria")
+	private String criteria;
+
+	@SerializedName("from")
 	public String getFrom() {
 		return from;
 	}
 
-    @SerializedName("from")
+	@SerializedName("from")
 	public void setFrom(String from) {
 		this.from = from;
 	}
 
-    @SerializedName("to")
+	@SerializedName("to")
 	public String getTo() {
 		return to;
 	}
 
-    @SerializedName("to")
+	@SerializedName("to")
 	public void setTo(String to) {
 		this.to = to;
 	}
 
-    @SerializedName("type")
+	@SerializedName("type")
 	public String getType() {
 		return type;
 	}
 
-    @SerializedName("type")
+	@SerializedName("type")
 	public void setType(String type) {
 		this.type = type;
 	}
+
+	@SerializedName("func")
+	public String getFunc() {
+		return func;
+	}
+
+	@SerializedName("func")
+	public void setFunc(String func) {
+		this.func = func;
+	}
+
+	@SerializedName("search")
+	public String getSearch() {
+		return search;
+	}
+
+	@SerializedName("search")
+	public void setSearch(String search) {
+		this.search = search;
+	}
+
+	@SerializedName("criteria")
+	public String getCriteria() {
+		return criteria;
+	}
+
+	@SerializedName("criteria")
+	public void setCriteria(String criteria) {
+		this.criteria = criteria;
+	}
+
 }

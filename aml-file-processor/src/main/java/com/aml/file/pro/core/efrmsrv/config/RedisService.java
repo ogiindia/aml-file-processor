@@ -28,6 +28,11 @@ public class RedisService {
         redisTemplate.opsForValue().set(key, value);
     }
     
+    public void toIntimatePub(String key) {
+    	// Publish event
+        redisTemplate.convertAndSend("data-channel", key);
+    }
+    
 	/*
 	 * public <T> T toPullObjectFrmRedis(String key, Class<T> type) { Gson gson =
 	 * new Gson(); String json = (String) redisTemplate.opsForValue().get(key);
@@ -50,7 +55,6 @@ public class RedisService {
 		try {
 
 			redisTemplate.opsForValue().set(keyName, objParam);
-
 		} catch (Exception e) {
 			Logger.error("Exception found in RedisService@toPushListIntoRedis : {}", e);
 		} finally {

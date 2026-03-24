@@ -42,6 +42,8 @@ public class JsonConfigLoader {
 		    //tranLtObj = gson.fromJson(reader, TrasactionMppList.class);
 			LOGGER.info("JsonConfigLoader@loadStartUpConfig Method - tranLtObj : {}", tranLtObj);
 			redisService.toPushListIntoRedis("LDCONFIG", tranLtObj);
+			
+			
 		} catch(Exception e) {
 			LOGGER.error("Exception found in JsonConfigLoader@loadStartUpConfig : {}",e);
 		} finally {

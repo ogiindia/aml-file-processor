@@ -15,6 +15,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Bean;
+import org.springframework.data.redis.connection.lettuce.LettuceConnectionFactory;
 import org.springframework.stereotype.Component;
 
 import com.aml.file.pro.core.efrmsrv.config.RedisService;
@@ -40,14 +41,20 @@ public class FileMapper {
 	@Autowired
 	RedisService redisService;
 	
+	 @Autowired
+	 private LettuceConnectionFactory connectionFactory;
+
+	  
+	
 	String redisKey = "NRTFILES-MAP";
 	
 	private final ScheduledExecutorService executor = Executors.newSingleThreadScheduledExecutor();
 	
+
 	/**
 	 * 
 	 */
-	@Bean
+	//@Bean
 	public void toLoadTranNRTMaptoRedis(){
 		LOGGER.info("FileMapper@toLoadTranNRTMaptoRedis Method Called...............");
 		String txnTableSPlt = null;
@@ -100,6 +107,10 @@ public class FileMapper {
 			try {
 				// Example: read/write to Redis
 				redisService.setValue("heartbeat", System.currentTimeMillis());
+				var cfg = connectionFactory.getStandaloneConfiguration();
+				if (cfg != null) {
+					LOGGER.warn("Redis host = " + cfg.getHostName() + ", port = " + cfg.getPort());
+				}
 				LOGGER.warn("Redis heartbeat updated");
 			} catch (Exception e) {
 				// Handle gracefully if Redis is unavailable
