@@ -2,7 +2,14 @@ package com.aml.file.pro.core.efrmsrv.utils;
 
 import java.sql.Timestamp;
 import java.text.SimpleDateFormat;
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeFormatterBuilder;
+import java.time.format.DateTimeParseException;
+import java.time.temporal.ChronoField;
+import java.time.temporal.TemporalAccessor;
 import java.util.Date;
+import java.util.Locale;
 import java.util.Map;
 
 import org.springframework.stereotype.Component;
@@ -19,6 +26,28 @@ public class DateFormatUtils {
 		  "dd/MM/yyyy", 
 	      "MM/dd/yyyy",
 		  "dd-MM-yyyy HH:mm:ss", "MM-dd-yyy"};
+	
+	public static LocalDate parseToLocalDate(String text) {
+	    for (String pattern : DATE_PATTERNS) {
+	        try {
+	            DateTimeFormatter formatter = new DateTimeFormatterBuilder()
+	                    .parseCaseInsensitive()             // handles JAN / Jan / jan
+	                    .appendPattern(pattern)
+	                    .toFormatter(Locale.ENGLISH);      // month names in English
+
+	            TemporalAccessor ta = formatter.parse(text);
+
+	            int year  = ta.get(ChronoField.YEAR);
+	            int month = ta.get(ChronoField.MONTH_OF_YEAR);
+	            int day   = ta.get(ChronoField.DAY_OF_MONTH);
+
+	            return LocalDate.of(year, month, day);
+	        } catch (DateTimeParseException ex) {
+	            // try next pattern
+	        }
+	    }
+	    throw new IllegalArgumentException("Unsupported date format: " + text);
+	}
 	
 	public Timestamp getTimestampValue(Map<String, Object> map, String key) {
         Object value = map.getOrDefault(key, null);

@@ -237,6 +237,21 @@ public class ParquetService {
 								isValid = true;
 							}
 							break;
+						case "amount":
+							value = srcField.accountNo();
+							if (value != null && !value.trim().isEmpty()) {
+								criteria = criteria.replace("#amount#", "'" + value.trim() + "'");
+								isValid = true;
+							}
+							break;
+
+						case "depositorwithdrawal":
+							value = srcField.accountNo();
+							if (value != null && !value.trim().isEmpty()) {
+								criteria = criteria.replace("#depositorwithdrawal#", "'" + value.trim() + "'");
+								isValid = true;
+							}
+							break;
 
 						case "transactionid":
 							value = srcField.transId();
